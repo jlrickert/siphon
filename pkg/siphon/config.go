@@ -54,13 +54,16 @@ type TableGroup struct {
 
 // ScheduleConfig defines a scheduled backup job.
 type ScheduleConfig struct {
-	Connection *string `yaml:"connection,omitempty" json:"connection,omitempty"`
-	Database   *string `yaml:"database,omitempty" json:"database,omitempty"`
-	Cron       *string `yaml:"cron,omitempty" json:"cron,omitempty"`
-	Repo       *string `yaml:"repo,omitempty" json:"repo,omitempty"`
-	BackupType *string `yaml:"backup_type,omitempty" json:"backup_type,omitempty"` // "logical", "physical", "file"
-	Retain     *int    `yaml:"retain,omitempty" json:"retain,omitempty"`
-	Enabled    *bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Connection *string          `yaml:"connection,omitempty" json:"connection,omitempty"`
+	Database   *string          `yaml:"database,omitempty" json:"database,omitempty"`
+	Repo       *string          `yaml:"repo,omitempty" json:"repo,omitempty"`
+	BackupType *string          `yaml:"backup_type,omitempty" json:"backup_type,omitempty"` // "logical", "physical", "file"
+	Compress   *string          `yaml:"compress,omitempty" json:"compress,omitempty"`
+	Time       *string          `yaml:"time,omitempty" json:"time,omitempty"`               // HH:MM
+	Interval   *string          `yaml:"interval,omitempty" json:"interval,omitempty"`       // daily, hourly, weekly
+	Backend    *string          `yaml:"backend,omitempty" json:"backend,omitempty"`          // "launchd" or "cron"
+	Retention  *RetentionPolicy `yaml:"retention,omitempty" json:"retention,omitempty"`
+	Enabled    *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
 // ConnectionMapEntry maps a working directory pattern to a connection name.

@@ -454,50 +454,62 @@ func (s *Siphon) ExecuteSQL(ctx context.Context, opts *ExecuteSQLOptions) (*Quer
 
 // CreateScheduleOptions configures creating a backup schedule.
 type CreateScheduleOptions struct {
-	Name       string
-	Connection string
-	Database   string
-	Cron       string
-	Repo       string
-	BackupType string
-	Retain     int
+	Name             string
+	Connection       string
+	Repo             string           // backup repository
+	Database         string           // override database
+	BackupType       string           // physical/logical/file
+	Compress         string           // zstd/gzip/none
+	Message          string           // default message for backups
+	BackupNameFormat string           // template override
+	Time             string           // HH:MM format
+	Interval         string           // daily, hourly, weekly
+	Backend          string           // "launchd" or "cron"
+	Retention        *RetentionPolicy // optional retention policy
+	Surface          Surface
+	Confirm          bool
 }
 
 // ScheduleInfo describes a configured backup schedule.
 type ScheduleInfo struct {
-	Name       string `json:"name"`
-	Connection string `json:"connection"`
-	Database   string `json:"database"`
-	Cron       string `json:"cron"`
-	Repo       string `json:"repo"`
-	BackupType string `json:"backup_type"`
-	Retain     int    `json:"retain"`
-	Enabled    bool   `json:"enabled"`
+	Name       string           `json:"name"`
+	Connection string           `json:"connection"`
+	Repo       string           `json:"repo,omitempty"`
+	Database   string           `json:"database,omitempty"`
+	BackupType string           `json:"backup_type,omitempty"`
+	Compress   string           `json:"compress,omitempty"`
+	Time       string           `json:"time,omitempty"`
+	Interval   string           `json:"interval,omitempty"`
+	Backend    string           `json:"backend,omitempty"`
+	Active     bool             `json:"active"`
+	Retention  *RetentionPolicy `json:"retention,omitempty"`
 }
 
 // CreateSchedule creates a new backup schedule.
 func (s *Siphon) CreateSchedule(ctx context.Context, opts *CreateScheduleOptions) error {
-	return ErrNotImplemented
+	return s.createScheduleImpl(ctx, opts)
 }
 
 // ListSchedulesOptions configures listing schedules.
 type ListSchedulesOptions struct {
-	Connection string
+	Surface Surface
 }
 
 // ListSchedules returns all configured backup schedules.
 func (s *Siphon) ListSchedules(ctx context.Context, opts *ListSchedulesOptions) ([]ScheduleInfo, error) {
-	return nil, ErrNotImplemented
+	return s.listSchedulesImpl(ctx, opts)
 }
 
 // RemoveScheduleOptions configures removing a schedule.
 type RemoveScheduleOptions struct {
-	Name string
+	Name    string
+	Surface Surface
+	Confirm bool
 }
 
 // RemoveSchedule removes a backup schedule.
 func (s *Siphon) RemoveSchedule(ctx context.Context, opts *RemoveScheduleOptions) error {
-	return ErrNotImplemented
+	return s.removeScheduleImpl(ctx, opts)
 }
 
 // --- Config operations ---

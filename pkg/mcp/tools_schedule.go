@@ -18,13 +18,19 @@ func registerScheduleTools(srv *sdkmcp.Server, s *siphon.Siphon) {
 // --- schedule_create ---
 
 type scheduleCreateInput struct {
-	Name       string `json:"name" jsonschema:"schedule name"`
-	Connection string `json:"connection" jsonschema:"target connection"`
-	Database   string `json:"database,omitempty" jsonschema:"target database"`
-	Cron       string `json:"cron" jsonschema:"cron expression"`
-	Repo       string `json:"repo,omitempty" jsonschema:"backup repository"`
-	BackupType string `json:"backup_type,omitempty" jsonschema:"backup type (logical, physical, file)"`
-	Retain     int    `json:"retain,omitempty" jsonschema:"number of backups to retain"`
+	Name             string `json:"name" jsonschema:"schedule name"`
+	Connection       string `json:"connection" jsonschema:"target connection"`
+	Repo             string `json:"repo,omitempty" jsonschema:"backup repository"`
+	Database         string `json:"database,omitempty" jsonschema:"target database"`
+	BackupType       string `json:"backup_type,omitempty" jsonschema:"backup type (logical, physical, file)"`
+	Compress         string `json:"compress,omitempty" jsonschema:"compression (zstd, gzip, none)"`
+	Message          string `json:"message,omitempty" jsonschema:"default message for backups"`
+	BackupNameFormat string `json:"backup_name_format,omitempty" jsonschema:"name template override"`
+	Time             string `json:"time,omitempty" jsonschema:"schedule time HH:MM"`
+	Interval         string `json:"interval,omitempty" jsonschema:"interval: daily, hourly, weekly"`
+	Backend          string `json:"backend,omitempty" jsonschema:"backend: launchd or cron"`
+	KeepCount        int    `json:"keep_count,omitempty" jsonschema:"retention: keep N most recent"`
+	KeepAge          string `json:"keep_age,omitempty" jsonschema:"retention: keep backups newer than duration"`
 }
 
 func registerScheduleCreate(srv *sdkmcp.Server, s *siphon.Siphon) {
@@ -35,15 +41,33 @@ func registerScheduleCreate(srv *sdkmcp.Server, s *siphon.Siphon) {
 			DestructiveHint: boolPtr(false),
 		},
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, in scheduleCreateInput) (*sdkmcp.CallToolResult, any, error) {
-		err := s.CreateSchedule(ctx, &siphon.CreateScheduleOptions{
-			Name:       in.Name,
-			Connection: in.Connection,
-			Database:   in.Database,
-			Cron:       in.Cron,
-			Repo:       in.Repo,
-			BackupType: in.BackupType,
-			Retain:     in.Retain,
-		})
+		opts := &siphon.CreateScheduleOptions{
+			Name:             in.Name,
+			Connection:       in.Connection,
+			Repo:             in.Repo,
+			Database:         in.Database,
+			BackupType:       in.BackupType,
+			Compress:         in.Compress,
+			Message:          in.Message,
+			BackupNameFormat: in.BackupNameFormat,
+			Time:             in.Time,
+			Interval:         in.Interval,
+			Backend:          in.Backend,
+			Surface:          siphon.SurfaceMCP,
+		}
+
+		if in.KeepCount > 0 || in.KeepAge != "" {
+			rp := &siphon.RetentionPolicy{}
+			if in.KeepCount > 0 {
+				rp.KeepCount = &in.KeepCount
+			}
+			if in.KeepAge != "" {
+				rp.KeepAge = &in.KeepAge
+			}
+			opts.Retention = rp
+		}
+
+		err := s.CreateSchedule(ctx, opts)
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
@@ -53,9 +77,7 @@ func registerScheduleCreate(srv *sdkmcp.Server, s *siphon.Siphon) {
 
 // --- schedule_list ---
 
-type scheduleListInput struct {
-	Connection string `json:"connection,omitempty" jsonschema:"filter by connection"`
-}
+type scheduleListInput struct{}
 
 func registerScheduleList(srv *sdkmcp.Server, s *siphon.Siphon) {
 	sdkmcp.AddTool(srv, &sdkmcp.Tool{
@@ -67,7 +89,7 @@ func registerScheduleList(srv *sdkmcp.Server, s *siphon.Siphon) {
 		},
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, in scheduleListInput) (*sdkmcp.CallToolResult, any, error) {
 		schedules, err := s.ListSchedules(ctx, &siphon.ListSchedulesOptions{
-			Connection: in.Connection,
+			Surface: siphon.SurfaceMCP,
 		})
 		if err != nil {
 			return errorResult(err), nil, nil
@@ -92,7 +114,8 @@ func registerScheduleRemove(srv *sdkmcp.Server, s *siphon.Siphon) {
 		},
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, in scheduleRemoveInput) (*sdkmcp.CallToolResult, any, error) {
 		err := s.RemoveSchedule(ctx, &siphon.RemoveScheduleOptions{
-			Name: in.Name,
+			Name:    in.Name,
+			Surface: siphon.SurfaceMCP,
 		})
 		if err != nil {
 			return errorResult(err), nil, nil

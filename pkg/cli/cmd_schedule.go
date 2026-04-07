@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"text/tabwriter"
 
 	"github.com/jlrickert/siphon/pkg/siphon"
 	"github.com/spf13/cobra"
@@ -26,6 +28,10 @@ func NewScheduleCmd(deps *Deps) *cobra.Command {
 
 func newScheduleCreateCmd(deps *Deps) *cobra.Command {
 	var opts siphon.CreateScheduleOptions
+	var useLaunchd bool
+	var useCron bool
+	var keepCount int
+	var keepAge string
 
 	cmd := &cobra.Command{
 		Use:   "create NAME",
@@ -33,38 +39,112 @@ func newScheduleCreateCmd(deps *Deps) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Name = args[0]
-			return deps.Siphon.CreateSchedule(cmd.Context(), &opts)
+			opts.Surface = siphon.SurfaceCLI
+
+			// Determine backend from flags.
+			if useLaunchd && useCron {
+				return fmt.Errorf("--launchd and --cron are mutually exclusive")
+			}
+			if useCron {
+				opts.Backend = "cron"
+			} else {
+				opts.Backend = "launchd"
+			}
+
+			// Build retention policy if specified.
+			if keepCount > 0 || keepAge != "" {
+				rp := &siphon.RetentionPolicy{}
+				if keepCount > 0 {
+					rp.KeepCount = &keepCount
+				}
+				if keepAge != "" {
+					rp.KeepAge = &keepAge
+				}
+				opts.Retention = rp
+			}
+
+			if err := deps.Siphon.CreateSchedule(cmd.Context(), &opts); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Schedule %q created (%s, %s at %s).\n",
+				opts.Name, opts.Backend, opts.Interval, opts.Time)
+			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.Connection, "connection", "", "target connection")
-	cmd.Flags().StringVar(&opts.Database, "database", "", "target database")
-	cmd.Flags().StringVar(&opts.Cron, "cron", "", "cron expression")
+	cmd.Flags().StringVar(&opts.Connection, "connection", "", "connection to backup (required)")
 	cmd.Flags().StringVar(&opts.Repo, "repo", "", "backup repository")
-	cmd.Flags().StringVar(&opts.BackupType, "type", "logical", "backup type")
-	cmd.Flags().IntVar(&opts.Retain, "retain", 0, "number of backups to retain")
+	cmd.Flags().StringVar(&opts.Database, "database", "", "override database")
+	cmd.Flags().StringVar(&opts.BackupType, "type", "", "backup type (physical/logical/file)")
+	cmd.Flags().StringVar(&opts.Compress, "compress", "", "compression (zstd/gzip/none)")
+	cmd.Flags().StringVar(&opts.Message, "message", "", "default message for backups")
+	cmd.Flags().StringVar(&opts.BackupNameFormat, "backup-name-format", "", "name template override")
+	cmd.Flags().StringVar(&opts.Time, "time", "02:00", "schedule time (HH:MM)")
+	cmd.Flags().StringVar(&opts.Interval, "interval", "daily", "interval: daily, hourly, weekly")
+	cmd.Flags().BoolVar(&useLaunchd, "launchd", false, "use launchd backend (macOS)")
+	cmd.Flags().BoolVar(&useCron, "cron", false, "use cron backend (Linux)")
+	cmd.Flags().IntVar(&keepCount, "keep-count", 0, "retention: keep N most recent")
+	cmd.Flags().StringVar(&keepAge, "keep-age", "", "retention: keep backups newer than duration (e.g., 720h, 30d)")
+
+	_ = cmd.MarkFlagRequired("connection")
+
+	_ = cmd.RegisterFlagCompletionFunc("type", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"logical", "physical", "file"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = cmd.RegisterFlagCompletionFunc("compress", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"zstd", "gzip", "none"}, cobra.ShellCompDirectiveNoFileComp
+	})
+	_ = cmd.RegisterFlagCompletionFunc("interval", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"daily", "hourly", "weekly"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	return cmd
 }
 
 func newScheduleListCmd(deps *Deps) *cobra.Command {
-	var opts siphon.ListSchedulesOptions
+	var format string
 
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List backup schedules",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := deps.Siphon.ListSchedules(cmd.Context(), &opts)
+			schedules, err := deps.Siphon.ListSchedules(cmd.Context(), &siphon.ListSchedulesOptions{
+				Surface: siphon.SurfaceCLI,
+			})
 			if err != nil {
 				return err
 			}
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "schedule list: not yet implemented")
+
+			switch format {
+			case "json":
+				data, _ := json.MarshalIndent(schedules, "", "  ")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), string(data))
+			default:
+				if len(schedules) == 0 {
+					_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No schedules configured.")
+					return nil
+				}
+				w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+				_, _ = fmt.Fprintln(w, "NAME\tCONNECTION\tTIME\tINTERVAL\tBACKEND\tACTIVE")
+				for _, s := range schedules {
+					active := "no"
+					if s.Active {
+						active = "yes"
+					}
+					_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+						s.Name, s.Connection, s.Time, s.Interval, s.Backend, active)
+				}
+				return w.Flush()
+			}
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&opts.Connection, "connection", "", "filter by connection")
+	cmd.Flags().StringVar(&format, "format", "text", "output format (text, json)")
+	_ = cmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"text", "json"}, cobra.ShellCompDirectiveNoFileComp
+	})
 
 	return cmd
 }
@@ -76,9 +156,15 @@ func newScheduleRemoveCmd(deps *Deps) *cobra.Command {
 		Short:   "Remove a backup schedule",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return deps.Siphon.RemoveSchedule(cmd.Context(), &siphon.RemoveScheduleOptions{
-				Name: args[0],
+			err := deps.Siphon.RemoveSchedule(cmd.Context(), &siphon.RemoveScheduleOptions{
+				Name:    args[0],
+				Surface: siphon.SurfaceCLI,
 			})
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Schedule %q removed.\n", args[0])
+			return nil
 		},
 	}
 }

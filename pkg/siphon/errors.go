@@ -53,4 +53,10 @@ var (
 	// ErrCycleDetected indicates a dependency cycle was found during
 	// topological sort.
 	ErrCycleDetected = errors.New("cycle detected")
+
+	// ErrScheduleExists indicates the named schedule already exists.
+	ErrScheduleExists = errors.New("schedule already exists")
+
+	// ErrScheduleNotFound indicates the named schedule was not found.
+	ErrScheduleNotFound = errors.New("schedule not found")
 )
