@@ -37,6 +37,8 @@ type FileBackupAdaptor interface {
 
 // TransferAdaptor provides cross-database table transfer.
 type TransferAdaptor interface {
+	ListTables(ctx context.Context, database string) ([]string, error)
+	GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error)
 	TransferTables(ctx context.Context, opts TransferOptions) error
 }
 
@@ -100,7 +102,7 @@ type TransferOptions struct {
 	Source      DatabaseTarget
 	Destination DatabaseTarget
 	Tables      []string
-	Truncate    bool
+	OnConflict  string // "skip", "overwrite", "merge"
 }
 
 // QueryResult holds the result of a query execution.

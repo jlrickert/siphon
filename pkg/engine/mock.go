@@ -35,7 +35,15 @@ type MockAdaptor struct {
 	CopyBackFn       func(ctx context.Context, opts CopyBackOptions) error
 	CopyBackupFn     func(ctx context.Context, opts CopyBackupOptions) error
 	CopyRestoreFn    func(ctx context.Context, opts CopyRestoreOptions) error
+	ListTablesFn     func(ctx context.Context, database string) ([]string, error)
+	GetForeignKeysFn func(ctx context.Context, database string) ([]ForeignKey, error)
 	TransferTablesFn func(ctx context.Context, opts TransferOptions) error
+
+	// Tables holds the configurable table list returned by ListTables.
+	Tables []string
+
+	// ForeignKeys holds the configurable FK list returned by GetForeignKeys.
+	ForeignKeys []ForeignKey
 	ExecuteFn        func(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryFn          func(ctx context.Context, query string, args ...any) (*QueryResult, error)
 }
@@ -129,6 +137,20 @@ func (m *MockAdaptor) CopyRestore(ctx context.Context, opts CopyRestoreOptions) 
 		return m.CopyRestoreFn(ctx, opts)
 	}
 	return nil
+}
+
+func (m *MockAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
+	if m.ListTablesFn != nil {
+		return m.ListTablesFn(ctx, database)
+	}
+	return m.Tables, nil
+}
+
+func (m *MockAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
+	if m.GetForeignKeysFn != nil {
+		return m.GetForeignKeysFn(ctx, database)
+	}
+	return m.ForeignKeys, nil
 }
 
 func (m *MockAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {

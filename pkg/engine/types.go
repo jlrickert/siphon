@@ -28,3 +28,9 @@ type DatabaseTarget struct {
 	Connection string
 	Database   string
 }
+
+// ForeignKey describes a foreign key relationship between two tables.
+type ForeignKey struct {
+	Table           string // table that has the foreign key
+	ReferencedTable string // table that is referenced
+}

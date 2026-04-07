@@ -396,17 +396,20 @@ func (s *Siphon) Restore(ctx context.Context, opts *RestoreOptions) error {
 
 // TransferOptions configures a cross-database transfer.
 type TransferOptions struct {
-	Source      string // CONN:DATABASE format
-	Destination string // CONN:DATABASE format
-	Tables      []string
-	Truncate    bool
-	Force       bool
-	Confirm     bool
+	Source        string   // source connection:database (colon syntax)
+	Target        string   // target connection:database (colon syntax)
+	Tables        []string // explicit table list
+	Groups        []string // named table groups from config
+	ExcludeGroups []string // named table groups to exclude
+	AllTables     bool     // override: transfer all tables
+	OnConflict    string   // "skip", "overwrite", "merge" (default: skip)
+	Surface       Surface  // which surface is calling (for policy)
+	Confirm       bool     // MCP confirmation for two-step destructive ops
 }
 
 // Transfer transfers tables between databases.
 func (s *Siphon) Transfer(ctx context.Context, opts *TransferOptions) error {
-	return ErrNotImplemented
+	return s.transferImpl(ctx, opts)
 }
 
 // --- SQL execution ---

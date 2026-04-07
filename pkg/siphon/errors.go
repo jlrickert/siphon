@@ -46,4 +46,11 @@ var (
 	// ErrConfirmationRequired indicates a destructive MCP operation needs
 	// confirm: true.
 	ErrConfirmationRequired = errors.New("confirmation required")
+
+	// ErrTransferFailed indicates that a transfer operation failed.
+	ErrTransferFailed = errors.New("transfer failed")
+
+	// ErrCycleDetected indicates a dependency cycle was found during
+	// topological sort.
+	ErrCycleDetected = errors.New("cycle detected")
 )
