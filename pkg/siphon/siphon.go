@@ -376,17 +376,20 @@ func (s *Siphon) LabelBackup(ctx context.Context, opts *LabelBackupOptions) erro
 
 // RestoreOptions configures a restore operation.
 type RestoreOptions struct {
-	BackupID   string
-	Path       string
-	Connection string
-	Database   string
-	Force      bool
-	Confirm    bool
+	Connection string   // target connection name
+	Path       string   // backup path or @repo/name
+	BackupID   string   // alias for Path (legacy)
+	Force      bool     // required for destructive restore
+	Database   string   // override target database name
+	Tables     []string // partial restore -- specific tables only
+	Type       string   // explicit backup type override (physical/logical/file)
+	Surface    Surface  // which surface is calling (for policy)
+	Confirm    bool     // MCP confirmation for two-step destructive ops
 }
 
 // Restore restores a database from a backup.
 func (s *Siphon) Restore(ctx context.Context, opts *RestoreOptions) error {
-	return ErrNotImplemented
+	return s.restoreImpl(ctx, opts)
 }
 
 // --- Transfer operations ---
