@@ -8,3 +8,10 @@ connections:
     port: 3306
     user: root
     database: testdb
+  local:
+    name: local
+    engine: sqlite
+    path: /home/testuser/data/local.db
+repos:
+  nightly:
+    path: /home/testuser/backups/nightly

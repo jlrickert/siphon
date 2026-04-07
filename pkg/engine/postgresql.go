@@ -4,12 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os/exec"
+	"strconv"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// Compile-time interface check.
-var _ Adaptor = (*PostgreSQLAdaptor)(nil)
+// Compile-time interface checks.
+var (
+	_ Adaptor              = (*PostgreSQLAdaptor)(nil)
+	_ LogicalBackupAdaptor = (*PostgreSQLAdaptor)(nil)
+)
 
 // PostgreSQLAdaptor implements the Adaptor interface for PostgreSQL.
 type PostgreSQLAdaptor struct {
@@ -69,6 +74,80 @@ func (a *PostgreSQLAdaptor) ListDatabases(ctx context.Context) ([]string, error)
 		databases = append(databases, name)
 	}
 	return databases, rows.Err()
+}
+
+// --- LogicalBackupAdaptor ---
+
+func (a *PostgreSQLAdaptor) Dump(ctx context.Context, opts DumpOptions) error {
+	args := []string{"-Fc"} // custom format
+	if a.cfg.Host != nil {
+		args = append(args, "-h", *a.cfg.Host)
+	}
+	if a.cfg.Port != nil {
+		args = append(args, "-p", strconv.Itoa(*a.cfg.Port))
+	}
+	if a.cfg.User != nil {
+		args = append(args, "-U", *a.cfg.User)
+	}
+	db := opts.Database
+	if db == "" && a.cfg.Database != nil {
+		db = *a.cfg.Database
+	}
+	if db != "" {
+		args = append(args, db)
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "pg_dump", args...)
+	if a.cfg.Password != nil {
+		cmd.Env = append(cmd.Environ(), "PGPASSWORD="+*a.cfg.Password)
+	}
+	if opts.Output != nil {
+		cmd.Stdout = opts.Output
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%w: pg_dump: %v", ErrDumpFailed, err)
+		}
+		return nil
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: pg_dump: %s: %v", ErrDumpFailed, string(output), err)
+	}
+	return nil
+}
+
+func (a *PostgreSQLAdaptor) LoadDump(ctx context.Context, opts LoadDumpOptions) error {
+	args := []string{}
+	if a.cfg.Host != nil {
+		args = append(args, "-h", *a.cfg.Host)
+	}
+	if a.cfg.Port != nil {
+		args = append(args, "-p", strconv.Itoa(*a.cfg.Port))
+	}
+	if a.cfg.User != nil {
+		args = append(args, "-U", *a.cfg.User)
+	}
+	db := opts.Database
+	if db == "" && a.cfg.Database != nil {
+		db = *a.cfg.Database
+	}
+	if db != "" {
+		args = append(args, "-d", db)
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "pg_restore", args...)
+	if a.cfg.Password != nil {
+		cmd.Env = append(cmd.Environ(), "PGPASSWORD="+*a.cfg.Password)
+	}
+	if opts.Input != nil {
+		cmd.Stdin = opts.Input
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: pg_restore: %s: %v", ErrLoadFailed, string(output), err)
+	}
+	return nil
 }
 
 // buildDSN constructs a PostgreSQL connection string from the connection configuration.

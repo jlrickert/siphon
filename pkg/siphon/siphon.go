@@ -10,12 +10,17 @@ import (
 	"github.com/jlrickert/siphon/pkg/engine"
 )
 
+// AdaptorFactory creates an engine adaptor from connection config. The default
+// factory is engine.NewAdaptor. Tests can override this to inject mock adaptors.
+type AdaptorFactory func(cfg *engine.ConnectionConfig) (engine.Adaptor, error)
+
 // Siphon is the central service struct. All operations flow through Siphon
 // via two parallel entry points: CLI commands and MCP tool calls.
 type Siphon struct {
-	Runtime       *toolkit.Runtime
-	PathService   *PathService
-	ConfigService *ConfigService
+	Runtime        *toolkit.Runtime
+	PathService    *PathService
+	ConfigService  *ConfigService
+	AdaptorFactory AdaptorFactory
 }
 
 // SiphonOptions configures a new Siphon instance.
@@ -59,9 +64,10 @@ func New(opts SiphonOptions) (*Siphon, error) {
 	}
 
 	return &Siphon{
-		Runtime:       rt,
-		PathService:   pathService,
-		ConfigService: configService,
+		Runtime:        rt,
+		PathService:    pathService,
+		ConfigService:  configService,
+		AdaptorFactory: engine.NewAdaptor,
 	}, nil
 }
 
@@ -257,7 +263,11 @@ func (s *Siphon) TestConnection(ctx context.Context, opts *TestConnectionOptions
 		return ErrConnectionNotFound
 	}
 
-	adaptor, err := engine.NewAdaptor(cc)
+	factory := s.AdaptorFactory
+	if factory == nil {
+		factory = engine.NewAdaptor
+	}
+	adaptor, err := factory(cc)
 	if err != nil {
 		return fmt.Errorf("creating adaptor: %w", err)
 	}
@@ -288,15 +298,18 @@ type BackupOptions struct {
 	Connection string
 	Database   string
 	BackupType string // "logical", "physical", "file"
+	Compress   string // "zstd", "gzip", "none"
+	Name       string // explicit backup name (overrides template)
 	Repo       string
 	Label      string
+	Message    string
 	Tables     []string
 	Force      bool
 }
 
 // Backup creates a database backup.
-func (s *Siphon) Backup(ctx context.Context, opts *BackupOptions) error {
-	return ErrNotImplemented
+func (s *Siphon) Backup(ctx context.Context, opts *BackupOptions) (*BackupDescriptor, error) {
+	return s.backupImpl(ctx, opts)
 }
 
 // BackupInfoOptions configures retrieving backup metadata.
@@ -321,7 +334,7 @@ type BackupDescriptor struct {
 
 // BackupInfo retrieves metadata for a specific backup.
 func (s *Siphon) BackupInfo(ctx context.Context, opts *BackupInfoOptions) (*BackupDescriptor, error) {
-	return nil, ErrNotImplemented
+	return s.backupInfoImpl(ctx, opts)
 }
 
 // ListBackupsOptions configures listing backups.
@@ -334,7 +347,7 @@ type ListBackupsOptions struct {
 
 // ListBackups returns available backups matching the filter criteria.
 func (s *Siphon) ListBackups(ctx context.Context, opts *ListBackupsOptions) ([]BackupDescriptor, error) {
-	return nil, ErrNotImplemented
+	return s.listBackupsImpl(ctx, opts)
 }
 
 // VerifyBackupOptions configures backup verification.
@@ -345,7 +358,7 @@ type VerifyBackupOptions struct {
 
 // VerifyBackup verifies the integrity of a backup.
 func (s *Siphon) VerifyBackup(ctx context.Context, opts *VerifyBackupOptions) error {
-	return ErrNotImplemented
+	return s.verifyBackupImpl(ctx, opts)
 }
 
 // LabelBackupOptions configures labeling a backup.
@@ -356,7 +369,7 @@ type LabelBackupOptions struct {
 
 // LabelBackup assigns or updates a label on a backup.
 func (s *Siphon) LabelBackup(ctx context.Context, opts *LabelBackupOptions) error {
-	return ErrNotImplemented
+	return s.labelBackupImpl(ctx, opts)
 }
 
 // --- Restore operations ---

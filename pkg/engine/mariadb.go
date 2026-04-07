@@ -4,12 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os/exec"
+	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-// Compile-time interface check.
-var _ Adaptor = (*MariaDBAdaptor)(nil)
+// Compile-time interface checks.
+var (
+	_ Adaptor               = (*MariaDBAdaptor)(nil)
+	_ PhysicalBackupAdaptor = (*MariaDBAdaptor)(nil)
+	_ LogicalBackupAdaptor  = (*MariaDBAdaptor)(nil)
+)
 
 // MariaDBAdaptor implements the Adaptor interface for MariaDB/MySQL.
 type MariaDBAdaptor struct {
@@ -69,6 +75,125 @@ func (a *MariaDBAdaptor) ListDatabases(ctx context.Context) ([]string, error) {
 		databases = append(databases, name)
 	}
 	return databases, rows.Err()
+}
+
+// --- PhysicalBackupAdaptor ---
+
+func (a *MariaDBAdaptor) PhysicalBackup(ctx context.Context, opts PhysicalBackupOptions) error {
+	args := []string{"--backup", "--target-dir=" + opts.TargetDir}
+	if a.cfg.User != nil {
+		args = append(args, "--user="+*a.cfg.User)
+	}
+	if a.cfg.Password != nil {
+		args = append(args, "--password="+*a.cfg.Password)
+	}
+	if a.cfg.Host != nil {
+		args = append(args, "--host="+*a.cfg.Host)
+	}
+	if a.cfg.Port != nil {
+		args = append(args, "--port="+strconv.Itoa(*a.cfg.Port))
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "mariabackup", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: mariabackup --backup: %s: %v", ErrPhysicalBackupFailed, string(output), err)
+	}
+	return nil
+}
+
+func (a *MariaDBAdaptor) Prepare(ctx context.Context, opts PrepareOptions) error {
+	args := []string{"--prepare", "--target-dir=" + opts.TargetDir}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "mariabackup", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: mariabackup --prepare: %s: %v", ErrPrepareFailed, string(output), err)
+	}
+	return nil
+}
+
+func (a *MariaDBAdaptor) CopyBack(ctx context.Context, opts CopyBackOptions) error {
+	args := []string{"--copy-back", "--target-dir=" + opts.SourceDir}
+	if opts.DataDir != "" {
+		args = append(args, "--datadir="+opts.DataDir)
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "mariabackup", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: mariabackup --copy-back: %s: %v", ErrCopyBackFailed, string(output), err)
+	}
+	return nil
+}
+
+// --- LogicalBackupAdaptor ---
+
+func (a *MariaDBAdaptor) Dump(ctx context.Context, opts DumpOptions) error {
+	args := []string{"--single-transaction", "--routines", "--triggers"}
+	if a.cfg.User != nil {
+		args = append(args, "-u", *a.cfg.User)
+	}
+	if a.cfg.Password != nil {
+		args = append(args, "-p"+*a.cfg.Password)
+	}
+	if a.cfg.Host != nil {
+		args = append(args, "-h", *a.cfg.Host)
+	}
+	if a.cfg.Port != nil {
+		args = append(args, "-P", strconv.Itoa(*a.cfg.Port))
+	}
+	if opts.Database != "" {
+		args = append(args, "--databases", opts.Database)
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "mariadb-dump", args...)
+	if opts.Output != nil {
+		cmd.Stdout = opts.Output
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%w: mariadb-dump: %v", ErrDumpFailed, err)
+		}
+		return nil
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: mariadb-dump: %s: %v", ErrDumpFailed, string(output), err)
+	}
+	return nil
+}
+
+func (a *MariaDBAdaptor) LoadDump(ctx context.Context, opts LoadDumpOptions) error {
+	args := []string{}
+	if a.cfg.User != nil {
+		args = append(args, "-u", *a.cfg.User)
+	}
+	if a.cfg.Password != nil {
+		args = append(args, "-p"+*a.cfg.Password)
+	}
+	if a.cfg.Host != nil {
+		args = append(args, "-h", *a.cfg.Host)
+	}
+	if a.cfg.Port != nil {
+		args = append(args, "-P", strconv.Itoa(*a.cfg.Port))
+	}
+	if opts.Database != "" {
+		args = append(args, opts.Database)
+	}
+	args = append(args, opts.ExtraArgs...)
+
+	cmd := exec.CommandContext(ctx, "mariadb", args...)
+	if opts.Input != nil {
+		cmd.Stdin = opts.Input
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: mariadb load: %s: %v", ErrLoadFailed, string(output), err)
+	}
+	return nil
 }
 
 // buildDSN constructs a MySQL DSN from the connection configuration.

@@ -23,8 +23,11 @@ type backupCreateInput struct {
 	Connection string   `json:"connection" jsonschema:"connection name"`
 	Database   string   `json:"database,omitempty" jsonschema:"database name"`
 	BackupType string   `json:"backup_type,omitempty" jsonschema:"backup type (logical, physical, file)"`
+	Compress   string   `json:"compress,omitempty" jsonschema:"compression (zstd, gzip, none)"`
+	Name       string   `json:"name,omitempty" jsonschema:"explicit backup name"`
 	Repo       string   `json:"repo,omitempty" jsonschema:"backup repository"`
 	Label      string   `json:"label,omitempty" jsonschema:"backup label"`
+	Message    string   `json:"message,omitempty" jsonschema:"backup message"`
 	Tables     []string `json:"tables,omitempty" jsonschema:"specific tables to back up"`
 	Force      bool     `json:"force,omitempty" jsonschema:"overwrite existing backup"`
 }
@@ -37,26 +40,30 @@ func registerBackupCreate(srv *sdkmcp.Server, s *siphon.Siphon) {
 			ReadOnlyHint: false,
 		},
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, in backupCreateInput) (*sdkmcp.CallToolResult, any, error) {
-		err := s.Backup(ctx, &siphon.BackupOptions{
+		desc, err := s.Backup(ctx, &siphon.BackupOptions{
 			Connection: in.Connection,
 			Database:   in.Database,
 			BackupType: in.BackupType,
+			Compress:   in.Compress,
+			Name:       in.Name,
 			Repo:       in.Repo,
 			Label:      in.Label,
+			Message:    in.Message,
 			Tables:     in.Tables,
 			Force:      in.Force,
 		})
 		if err != nil {
 			return errorResult(err), nil, nil
 		}
-		return textResult("backup created"), nil, nil
+		data, _ := json.Marshal(desc)
+		return textResult(string(data)), nil, nil
 	})
 }
 
 // --- backup_info ---
 
 type backupInfoInput struct {
-	BackupID string `json:"backup_id" jsonschema:"backup identifier"`
+	BackupID string `json:"backup_id,omitempty" jsonschema:"backup identifier"`
 	Path     string `json:"path,omitempty" jsonschema:"backup path"`
 }
 
@@ -116,7 +123,7 @@ func registerBackupList(srv *sdkmcp.Server, s *siphon.Siphon) {
 // --- backup_verify ---
 
 type backupVerifyInput struct {
-	BackupID string `json:"backup_id" jsonschema:"backup identifier"`
+	BackupID string `json:"backup_id,omitempty" jsonschema:"backup identifier"`
 	Path     string `json:"path,omitempty" jsonschema:"backup path"`
 }
 

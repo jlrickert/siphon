@@ -32,6 +32,11 @@ func NewRootCmd(deps *Deps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Allow pre-initialized Siphon (e.g., from parity tests).
+			if deps.Siphon != nil {
+				return nil
+			}
+
 			rt := deps.Runtime
 			if rt == nil {
 				return fmt.Errorf("runtime is required")
