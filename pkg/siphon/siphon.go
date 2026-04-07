@@ -417,9 +417,12 @@ func (s *Siphon) Transfer(ctx context.Context, opts *TransferOptions) error {
 // ExecuteSQLOptions configures raw SQL execution.
 type ExecuteSQLOptions struct {
 	Connection string
-	Database   string
-	Query      string
-	Format     string // "table", "json", "csv"
+	Query      string  // SQL query text
+	File       string  // path to SQL file (alternative to Query)
+	Format     string  // output format: table, csv, json
+	Database   string  // override database
+	Surface    Surface // which surface is calling (for policy)
+	Confirm    bool    // MCP confirmation for two-step destructive ops
 }
 
 // QueryResult holds the result of a SQL query.
@@ -431,7 +434,20 @@ type QueryResult struct {
 
 // ExecuteSQL executes a SQL query against a connection.
 func (s *Siphon) ExecuteSQL(ctx context.Context, opts *ExecuteSQLOptions) (*QueryResult, error) {
-	return nil, ErrNotImplemented
+	// If a file is specified and no inline query, read the file.
+	if opts.File != "" && opts.Query == "" {
+		data, err := s.Runtime.ReadFile(opts.File)
+		if err != nil {
+			return nil, fmt.Errorf("reading SQL file: %w", err)
+		}
+		opts.Query = string(data)
+	}
+
+	if opts.Query == "" {
+		return nil, fmt.Errorf("query is required")
+	}
+
+	return s.executeSQLImpl(ctx, opts)
 }
 
 // --- Schedule operations ---
