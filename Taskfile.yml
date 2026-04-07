@@ -33,3 +33,20 @@ tasks:
       - go vet ./...
     sources:
       - ./**/*.go
+
+  integration:
+    desc: Run integration tests (requires Docker containers).
+    cmds:
+      - docker compose up -d --wait
+      - go test -tags integration -count=1 -v ./pkg/integration/...
+      - docker compose down
+
+  integration-up:
+    desc: Start test database containers.
+    cmds:
+      - docker compose up -d --wait
+
+  integration-down:
+    desc: Stop test database containers.
+    cmds:
+      - docker compose down

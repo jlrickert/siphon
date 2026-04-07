@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: testpass
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: siphon
+      MYSQL_PASSWORD: siphonpass
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgresql:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: siphon
+      POSTGRES_PASSWORD: siphonpass
+      POSTGRES_DB: testdb
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U siphon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
