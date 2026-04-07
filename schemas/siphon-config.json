@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jlrickert/siphon/schemas/siphon-config.json",
+  "title": "Siphon Configuration",
+  "description": "Configuration schema for the siphon database management tool.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration file version."
+    },
+    "default_connection": {
+      "type": "string",
+      "description": "Default connection name used when no connection is specified."
+    },
+    "fallback_connection": {
+      "type": "string",
+      "description": "Fallback connection when default is unavailable."
+    },
+    "log_file": {
+      "type": "string",
+      "description": "Path to log file. Supports ~ expansion."
+    },
+    "log_level": {
+      "type": "string",
+      "enum": ["debug", "info", "warn", "error"],
+      "description": "Minimum log level."
+    },
+    "connections": {
+      "type": "object",
+      "description": "Named database connections.",
+      "additionalProperties": {
+        "$ref": "#/$defs/ConnectionConfig"
+      }
+    },
+    "repos": {
+      "type": "object",
+      "description": "Named backup repositories.",
+      "additionalProperties": {
+        "$ref": "#/$defs/RepoConfig"
+      }
+    },
+    "default_repo": {
+      "type": "string",
+      "description": "Default backup repository name."
+    },
+    "policies": {
+      "type": "object",
+      "description": "Named operational policies.",
+      "additionalProperties": {
+        "$ref": "#/$defs/PolicyConfig"
+      }
+    },
+    "table_groups": {
+      "type": "object",
+      "description": "Named table groups for selective backup/transfer.",
+      "additionalProperties": {
+        "$ref": "#/$defs/TableGroup"
+      }
+    },
+    "schedules": {
+      "type": "object",
+      "description": "Named backup schedules.",
+      "additionalProperties": {
+        "$ref": "#/$defs/ScheduleConfig"
+      }
+    },
+    "connection_map": {
+      "type": "array",
+      "description": "Maps connection aliases to environments.",
+      "items": {
+        "$ref": "#/$defs/ConnectionMapEntry"
+      }
+    },
+    "backup_name_format": {
+      "type": "string",
+      "description": "Go template for backup file naming."
+    }
+  },
+  "$defs": {
+    "ConnectionConfig": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "engine": {
+          "type": "string",
+          "enum": ["mariadb", "postgresql", "sqlite"]
+        },
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "user": { "type": "string" },
+        "password": { "type": "string" },
+        "password_env": { "type": "string" },
+        "database": { "type": "string" },
+        "path": { "type": "string", "description": "SQLite file path." }
+      },
+      "required": ["engine"]
+    },
+    "RepoConfig": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["local", "s3"]
+        },
+        "compress": { "type": "boolean" },
+        "encrypt": { "type": "boolean" }
+      }
+    },
+    "PolicyConfig": {
+      "type": "object",
+      "properties": {
+        "connection": { "type": "string" },
+        "allow_restore": { "type": "boolean" },
+        "allow_transfer": { "type": "boolean" },
+        "allow_sql": { "type": "boolean" },
+        "deny_databases": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "TableGroup": {
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "pattern": { "type": "string" },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ScheduleConfig": {
+      "type": "object",
+      "properties": {
+        "connection": { "type": "string" },
+        "database": { "type": "string" },
+        "cron": { "type": "string" },
+        "repo": { "type": "string" },
+        "backup_type": {
+          "type": "string",
+          "enum": ["logical", "physical", "file"]
+        },
+        "retain": { "type": "integer" },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "ConnectionMapEntry": {
+      "type": "object",
+      "properties": {
+        "alias": { "type": "string" },
+        "environment": { "type": "string" }
+      },
+      "required": ["alias"]
+    }
+  }
+}

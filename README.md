@@ -14,18 +14,18 @@ connection management through three isomorphic interfaces.
   configurable table groups, and conflict resolution
 - **SQL execution** — Interactive, piped, and file-based SQL with table, CSV,
   and JSON output formatters
-- **Connection management** — Named connections with test, add, remove, and
-  list operations; directory-based connection resolution via `connectionMap`
-- **Scheduling** — Automated backups via launchd (macOS) and cron (Linux)
-  with retention policies
+- **Connection management** — Named connections with test, add, remove, and list
+  operations; directory-based connection resolution via `connectionMap`
+- **Scheduling** — Automated backups via launchd (macOS) and cron (Linux) with
+  retention policies
 
 ## Supported Engines
 
-| Engine | Role | Backup Types |
-| ------ | ---- | ------------ |
-| MariaDB | Primary | Physical (mariabackup), Logical (mysqldump) |
-| PostgreSQL | Secondary | Logical (pg_dump) |
-| SQLite | Tertiary (embedded) | File copy |
+| Engine     | Role                | Backup Types                                |
+| ---------- | ------------------- | ------------------------------------------- |
+| MariaDB    | Primary             | Physical (mariabackup), Logical (mysqldump) |
+| PostgreSQL | Secondary           | Logical (pg_dump)                           |
+| SQLite     | Tertiary (embedded) | File copy                                   |
 
 ## Three Interfaces
 

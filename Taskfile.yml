@@ -1,0 +1,35 @@
+# https://taskfile.dev
+
+version: "3"
+
+tasks:
+  test:
+    desc: Run all tests.
+    cmds:
+      - go test ./pkg/... {{.CLI_ARGS}}
+    sources:
+      - ./pkg/**/*.go
+    silent: true
+
+  install:
+    desc: Install the siphon CLI.
+    cmds:
+      - go install ./cmd/siphon
+    sources:
+      - cmd/**/*.go
+      - pkg/**/*.go
+
+  build:
+    desc: Build the siphon binary.
+    cmds:
+      - go build -o ./bin/siphon ./cmd/siphon
+    sources:
+      - cmd/**/*.go
+      - pkg/**/*.go
+
+  lint:
+    desc: Run go vet.
+    cmds:
+      - go vet ./...
+    sources:
+      - ./**/*.go
