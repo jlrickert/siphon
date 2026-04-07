@@ -30,13 +30,18 @@ type RepoConfig struct {
 	Encrypt  *bool   `yaml:"encrypt,omitempty" json:"encrypt,omitempty"`
 }
 
-// PolicyConfig defines operational policies for connections.
+// PolicyConfig defines operational policies for connections. It includes both
+// per-operation controls (allow_restore, etc.) and per-surface action overrides
+// (cli, mcp, api).
 type PolicyConfig struct {
-	Connection    *string  `yaml:"connection,omitempty" json:"connection,omitempty"`
-	AllowRestore  *bool    `yaml:"allow_restore,omitempty" json:"allow_restore,omitempty"`
-	AllowTransfer *bool    `yaml:"allow_transfer,omitempty" json:"allow_transfer,omitempty"`
-	AllowSQL      *bool    `yaml:"allow_sql,omitempty" json:"allow_sql,omitempty"`
-	DenyDatabases []string `yaml:"deny_databases,omitempty" json:"deny_databases,omitempty"`
+	Connection    *string       `yaml:"connection,omitempty" json:"connection,omitempty"`
+	CLI           *PolicyAction `yaml:"cli,omitempty" json:"cli,omitempty"`
+	MCP           *PolicyAction `yaml:"mcp,omitempty" json:"mcp,omitempty"`
+	API           *PolicyAction `yaml:"api,omitempty" json:"api,omitempty"`
+	AllowRestore  *bool         `yaml:"allow_restore,omitempty" json:"allow_restore,omitempty"`
+	AllowTransfer *bool         `yaml:"allow_transfer,omitempty" json:"allow_transfer,omitempty"`
+	AllowSQL      *bool         `yaml:"allow_sql,omitempty" json:"allow_sql,omitempty"`
+	DenyDatabases []string      `yaml:"deny_databases,omitempty" json:"deny_databases,omitempty"`
 }
 
 // TableGroup defines a named group of tables. It supports two modes:
@@ -58,10 +63,14 @@ type ScheduleConfig struct {
 	Enabled    *bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
 
-// ConnectionMapEntry maps a connection alias to its environment context.
+// ConnectionMapEntry maps a working directory pattern to a connection name.
+// When a user runs siphon from a directory matching the pattern, the mapped
+// connection is used as the default.
 type ConnectionMapEntry struct {
-	Alias       string `yaml:"alias" json:"alias"`
-	Environment string `yaml:"environment,omitempty" json:"environment,omitempty"` // "dev", "staging", "prod"
+	Prefix     *string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+	Match      *string `yaml:"match,omitempty" json:"match,omitempty"`
+	Mode       *string `yaml:"mode,omitempty" json:"mode,omitempty"` // "prefix" (default) or "regex"
+	Connection string  `yaml:"connection" json:"connection"`
 }
 
 // MergeConfig merges overlay on top of base. Scalars use pointer-based
@@ -105,17 +114,17 @@ func MergeConfig(base, overlay *Config) *Config {
 	merged.TableGroups = mergeMaps(base.TableGroups, overlay.TableGroups)
 	merged.Schedules = mergeMaps(base.Schedules, overlay.Schedules)
 
-	// Append-with-dedup for connection map.
+	// Append-with-dedup for connection map. Dedup key is the connection name.
 	if len(overlay.ConnectionMap) > 0 {
 		seen := make(map[string]bool)
 		for _, e := range base.ConnectionMap {
-			seen[e.Alias] = true
+			seen[e.Connection] = true
 		}
 		combined := append([]ConnectionMapEntry{}, base.ConnectionMap...)
 		for _, e := range overlay.ConnectionMap {
-			if !seen[e.Alias] {
+			if !seen[e.Connection] {
 				combined = append(combined, e)
-				seen[e.Alias] = true
+				seen[e.Connection] = true
 			}
 		}
 		merged.ConnectionMap = combined

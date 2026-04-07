@@ -17,14 +17,36 @@ View resolved configuration with optional per-field provenance.
 ## CLI
 
 ```bash
+# Show resolved config as YAML
 siphon config
+
+# Show config with per-field provenance annotations
 siphon config --explain
 ```
 
+The `--explain` flag shows which configuration tier provided each value,
+helping debug config cascade resolution.
+
 ## MCP Tools
 
-- `config`
+- `config` — Show resolved configuration (params: explain)
 
 ## API
 
-- `Siphon.Config()`
+- `Siphon.Config(ctx, *ConfigOptions) (*ResolvedConfig, error)`
+
+## Merge Semantics
+
+- **Scalars**: Pointer-based override (`*string`, `*bool`). Higher-rank
+  tiers override lower-rank values.
+- **Maps** (connections, repos, policies): Recursive deep merge. Keys from
+  higher-rank tiers override same-name keys from lower-rank tiers.
+- **Lists** (`connectionMap`): Append with deduplication by connection name.
+
+## Environment Variables
+
+| Variable                    | Config field         |
+| --------------------------- | -------------------- |
+| `SIPHON_DEFAULT_CONNECTION` | `default_connection` |
+| `SIPHON_LOG_FILE`           | `log_file`           |
+| `SIPHON_LOG_LEVEL`          | `log_level`          |

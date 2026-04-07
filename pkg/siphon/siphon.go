@@ -3,6 +3,7 @@ package siphon
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jlrickert/cli-toolkit/toolkit"
@@ -71,17 +72,55 @@ type ListConnectionsOptions struct {
 	Format string // output format
 }
 
-// ConnectionInfo describes a configured connection.
+// ConnectionInfo describes a configured connection for display purposes.
+// Sensitive fields (password) are never included.
 type ConnectionInfo struct {
-	Name   string        `json:"name"`
-	Engine engine.Engine `json:"engine"`
-	Host   string        `json:"host,omitempty"`
-	Port   int           `json:"port,omitempty"`
+	Name        string        `json:"name"`
+	Engine      engine.Engine `json:"engine"`
+	Host        string        `json:"host,omitempty"`
+	Port        int           `json:"port,omitempty"`
+	User        string        `json:"user,omitempty"`
+	Database    string        `json:"database,omitempty"`
+	Path        string        `json:"path,omitempty"`
+	HasPassword bool          `json:"has_password"`
 }
 
 // ListConnections returns all configured connections.
 func (s *Siphon) ListConnections(ctx context.Context, opts *ListConnectionsOptions) ([]ConnectionInfo, error) {
-	return nil, ErrNotImplemented
+	cfg, err := s.ConfigService.Config(true)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	var connections []ConnectionInfo
+	for name, cc := range cfg.Connections {
+		info := ConnectionInfo{
+			Name:   name,
+			Engine: cc.Engine,
+		}
+		if cc.Host != nil {
+			info.Host = *cc.Host
+		}
+		if cc.Port != nil {
+			info.Port = *cc.Port
+		}
+		if cc.User != nil {
+			info.User = *cc.User
+		}
+		if cc.Database != nil {
+			info.Database = *cc.Database
+		}
+		if cc.Path != nil {
+			info.Path = *cc.Path
+		}
+		info.HasPassword = (cc.Password != nil && *cc.Password != "") ||
+			(cc.PasswordEnv != nil && *cc.PasswordEnv != "")
+		connections = append(connections, info)
+	}
+
+	// Sort by name for deterministic output.
+	sortConnectionInfos(connections)
+	return connections, nil
 }
 
 // AddConnectionOptions configures adding a connection.
@@ -97,9 +136,63 @@ type AddConnectionOptions struct {
 	Path        string // SQLite file path
 }
 
-// AddConnection adds a new connection to the configuration.
+// AddConnection adds a new connection to the user configuration.
 func (s *Siphon) AddConnection(ctx context.Context, opts *AddConnectionOptions) error {
-	return ErrNotImplemented
+	if opts.Name == "" {
+		return fmt.Errorf("connection name is required")
+	}
+
+	// Load the user config (not merged) so we write back to the right file.
+	userCfg, err := s.ConfigService.UserConfig(false)
+	if err != nil {
+		// If user config doesn't exist, start with an empty one.
+		userCfg = &Config{}
+	}
+
+	if userCfg.Connections == nil {
+		userCfg.Connections = make(map[string]*engine.ConnectionConfig)
+	}
+
+	if _, exists := userCfg.Connections[opts.Name]; exists {
+		return ErrConnectionExists
+	}
+
+	cc := &engine.ConnectionConfig{
+		Name:   opts.Name,
+		Engine: opts.Engine,
+	}
+	if opts.Host != "" {
+		cc.Host = &opts.Host
+	}
+	if opts.Port != 0 {
+		cc.Port = &opts.Port
+	}
+	if opts.User != "" {
+		cc.User = &opts.User
+	}
+	if opts.Password != "" {
+		cc.Password = &opts.Password
+	}
+	if opts.PasswordEnv != "" {
+		cc.PasswordEnv = &opts.PasswordEnv
+	}
+	if opts.Database != "" {
+		cc.Database = &opts.Database
+	}
+	if opts.Path != "" {
+		cc.Path = &opts.Path
+	}
+
+	userCfg.Connections[opts.Name] = cc
+
+	path := s.PathService.UserConfig()
+	if err := WriteConfig(s.Runtime, path, userCfg); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+
+	// Invalidate config cache since we changed the underlying file.
+	s.ConfigService.ResetCache()
+	return nil
 }
 
 // RemoveConnectionOptions configures removing a connection.
@@ -108,19 +201,84 @@ type RemoveConnectionOptions struct {
 	Force bool
 }
 
-// RemoveConnection removes a connection from the configuration.
+// RemoveConnection removes a connection from the user configuration.
 func (s *Siphon) RemoveConnection(ctx context.Context, opts *RemoveConnectionOptions) error {
-	return ErrNotImplemented
+	if opts.Name == "" {
+		return fmt.Errorf("connection name is required")
+	}
+
+	userCfg, err := s.ConfigService.UserConfig(false)
+	if err != nil {
+		return ErrConnectionNotFound
+	}
+
+	if userCfg.Connections == nil {
+		return ErrConnectionNotFound
+	}
+
+	if _, exists := userCfg.Connections[opts.Name]; !exists {
+		return ErrConnectionNotFound
+	}
+
+	delete(userCfg.Connections, opts.Name)
+
+	path := s.PathService.UserConfig()
+	if err := WriteConfig(s.Runtime, path, userCfg); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+
+	s.ConfigService.ResetCache()
+	return nil
 }
 
 // TestConnectionOptions configures testing a connection.
 type TestConnectionOptions struct {
-	Name string
+	Name    string
+	Timeout time.Duration
+}
+
+// TestConnectionResult holds the result of a connection test.
+type TestConnectionResult struct {
+	Name    string        `json:"name"`
+	Success bool          `json:"success"`
+	Latency time.Duration `json:"latency"`
+	Error   string        `json:"error,omitempty"`
 }
 
 // TestConnection tests connectivity to a named connection.
 func (s *Siphon) TestConnection(ctx context.Context, opts *TestConnectionOptions) error {
-	return ErrNotImplemented
+	cfg, err := s.ConfigService.Config(true)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	cc, ok := cfg.Connections[opts.Name]
+	if !ok {
+		return ErrConnectionNotFound
+	}
+
+	adaptor, err := engine.NewAdaptor(cc)
+	if err != nil {
+		return fmt.Errorf("creating adaptor: %w", err)
+	}
+	defer adaptor.Close()
+
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = 5 * time.Second
+	}
+	testCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if err := adaptor.Connect(testCtx); err != nil {
+		return fmt.Errorf("connect failed: %w", err)
+	}
+
+	if err := adaptor.Ping(testCtx); err != nil {
+		return fmt.Errorf("ping failed: %w", err)
+	}
+
+	return nil
 }
 
 // --- Backup operations ---
@@ -323,5 +481,90 @@ type ResolvedConfig struct {
 
 // Config returns the resolved configuration.
 func (s *Siphon) Config(ctx context.Context, opts *ConfigOptions) (*ResolvedConfig, error) {
-	return nil, ErrNotImplemented
+	cfg, err := s.ConfigService.Config(false)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	result := &ResolvedConfig{
+		Config: cfg,
+	}
+
+	if opts.Explain {
+		result.Provenance = buildProvenance(s.ConfigService)
+	}
+
+	return result, nil
+}
+
+// buildProvenance creates a field-to-source mapping from the ConfigService's
+// resolved sources.
+func buildProvenance(cs *ConfigService) map[string]string {
+	prov := make(map[string]string)
+	if len(cs.ResolvedSources) == 0 {
+		return prov
+	}
+
+	// The resolved sources are listed most-specific first. We record
+	// which sources contributed so the user can see provenance.
+	for _, source := range cs.ResolvedSources {
+		prov["source"] = source
+		break // Most specific source wins for the summary.
+	}
+
+	// Build detailed provenance by comparing each tier.
+	userCfg, _ := cs.UserConfig(true)
+	projectCfg, _ := cs.ProjectConfig(true)
+
+	if projectCfg != nil {
+		if projectCfg.DefaultConnection != nil {
+			prov["default_connection"] = "project config"
+		}
+		if projectCfg.LogFile != nil {
+			prov["log_file"] = "project config"
+		}
+		if projectCfg.LogLevel != nil {
+			prov["log_level"] = "project config"
+		}
+		if len(projectCfg.Connections) > 0 {
+			for name := range projectCfg.Connections {
+				prov["connections."+name] = "project config"
+			}
+		}
+	}
+
+	if userCfg != nil {
+		if userCfg.DefaultConnection != nil {
+			if _, set := prov["default_connection"]; !set {
+				prov["default_connection"] = "user config"
+			}
+		}
+		if userCfg.LogFile != nil {
+			if _, set := prov["log_file"]; !set {
+				prov["log_file"] = "user config"
+			}
+		}
+		if userCfg.LogLevel != nil {
+			if _, set := prov["log_level"]; !set {
+				prov["log_level"] = "user config"
+			}
+		}
+		if len(userCfg.Connections) > 0 {
+			for name := range userCfg.Connections {
+				key := "connections." + name
+				if _, set := prov[key]; !set {
+					prov[key] = "user config"
+				}
+			}
+		}
+	}
+
+	return prov
+}
+
+// sortConnectionInfos sorts connection infos by name for deterministic output.
+func sortConnectionInfos(infos []ConnectionInfo) {
+	sort.Slice(infos, func(i, j int) bool {
+		return infos[i].Name < infos[j].Name
+	})
 }

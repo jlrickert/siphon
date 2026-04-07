@@ -67,7 +67,7 @@
     },
     "connection_map": {
       "type": "array",
-      "description": "Maps connection aliases to environments.",
+      "description": "Maps working directory patterns to connections. First match wins.",
       "items": {
         "$ref": "#/$defs/ConnectionMapEntry"
       }
@@ -110,8 +110,24 @@
     },
     "PolicyConfig": {
       "type": "object",
+      "description": "Per-connection, per-surface policy overrides.",
       "properties": {
         "connection": { "type": "string" },
+        "cli": {
+          "type": "string",
+          "enum": ["allow", "confirm", "deny", "readonly"],
+          "description": "Policy action for CLI surface."
+        },
+        "mcp": {
+          "type": "string",
+          "enum": ["allow", "confirm", "deny", "readonly"],
+          "description": "Policy action for MCP surface."
+        },
+        "api": {
+          "type": "string",
+          "enum": ["allow", "confirm", "deny", "readonly"],
+          "description": "Policy action for API surface."
+        },
         "allow_restore": { "type": "boolean" },
         "allow_transfer": { "type": "boolean" },
         "allow_sql": { "type": "boolean" },
@@ -152,11 +168,27 @@
     },
     "ConnectionMapEntry": {
       "type": "object",
+      "description": "Maps a working directory pattern to a connection.",
       "properties": {
-        "alias": { "type": "string" },
-        "environment": { "type": "string" }
+        "prefix": {
+          "type": "string",
+          "description": "Directory prefix to match against the working directory."
+        },
+        "match": {
+          "type": "string",
+          "description": "Regex pattern to match against the working directory."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["prefix", "regex"],
+          "description": "Match mode. Defaults to 'prefix'."
+        },
+        "connection": {
+          "type": "string",
+          "description": "Connection name to use when the pattern matches."
+        }
       },
-      "required": ["alias"]
+      "required": ["connection"]
     }
   }
 }

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -108,7 +109,8 @@ func registerConnectionsRemove(srv *sdkmcp.Server, s *siphon.Siphon) {
 // --- connections_test ---
 
 type connectionsTestInput struct {
-	Name string `json:"name" jsonschema:"connection name to test"`
+	Name    string `json:"name" jsonschema:"connection name to test"`
+	Timeout string `json:"timeout,omitempty" jsonschema:"timeout duration (e.g. 5s)"`
 }
 
 func registerConnectionsTest(srv *sdkmcp.Server, s *siphon.Siphon) {
@@ -120,8 +122,17 @@ func registerConnectionsTest(srv *sdkmcp.Server, s *siphon.Siphon) {
 			OpenWorldHint: boolPtr(true),
 		},
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, in connectionsTestInput) (*sdkmcp.CallToolResult, any, error) {
+		var timeout time.Duration
+		if in.Timeout != "" {
+			var err error
+			timeout, err = time.ParseDuration(in.Timeout)
+			if err != nil {
+				return errorResult(err), nil, nil
+			}
+		}
 		err := s.TestConnection(ctx, &siphon.TestConnectionOptions{
-			Name: in.Name,
+			Name:    in.Name,
+			Timeout: timeout,
 		})
 		if err != nil {
 			return errorResult(err), nil, nil
