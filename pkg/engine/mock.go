@@ -44,8 +44,8 @@ type MockAdaptor struct {
 
 	// ForeignKeys holds the configurable FK list returned by GetForeignKeys.
 	ForeignKeys []ForeignKey
-	ExecuteFn        func(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryFn          func(ctx context.Context, query string, args ...any) (*QueryResult, error)
+	ExecuteFn   func(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryFn     func(ctx context.Context, query string, args ...any) (*QueryResult, error)
 }
 
 // NewMockAdaptor returns a MockAdaptor with the given engine type.

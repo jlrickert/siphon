@@ -10,10 +10,10 @@ func TestParseColonSyntax(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		input      string
-		wantConn   string
-		wantDB     string
+		name     string
+		input    string
+		wantConn string
+		wantDB   string
 	}{
 		{
 			name:     "connection only",

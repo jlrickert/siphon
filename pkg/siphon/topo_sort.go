@@ -12,8 +12,8 @@ type TableDependency struct {
 // It returns an error if a cycle is detected.
 func TopoSort(deps []TableDependency) ([]string, error) {
 	// Build adjacency list and in-degree map.
-	graph := make(map[string][]string)       // table -> tables that depend on it
-	inDegree := make(map[string]int)          // table -> number of dependencies
+	graph := make(map[string][]string) // table -> tables that depend on it
+	inDegree := make(map[string]int)   // table -> number of dependencies
 	allTables := make(map[string]bool)
 
 	for _, d := range deps {

@@ -522,7 +522,7 @@ type ConfigOptions struct {
 // ResolvedConfig holds the fully resolved configuration with optional
 // per-field provenance.
 type ResolvedConfig struct {
-	Config    *Config            `json:"config"`
+	Config     *Config           `json:"config"`
 	Provenance map[string]string `json:"provenance,omitempty"` // field -> source tier
 }
 

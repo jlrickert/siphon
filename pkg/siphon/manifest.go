@@ -16,12 +16,12 @@ const ManifestFilename = "backup.meta.yaml"
 type BackupManifest struct {
 	Version    string            `yaml:"version"`
 	Engine     string            `yaml:"engine"`
-	Type       string            `yaml:"type"`                 // "physical", "logical", "file"
+	Type       string            `yaml:"type"` // "physical", "logical", "file"
 	Connection string            `yaml:"connection"`
 	Database   string            `yaml:"database,omitempty"`
 	Timestamp  time.Time         `yaml:"timestamp"`
-	Checksum   string            `yaml:"checksum,omitempty"`   // SHA-256 of backup data
-	Compress   string            `yaml:"compress,omitempty"`   // "zstd", "gzip", "none"
+	Checksum   string            `yaml:"checksum,omitempty"` // SHA-256 of backup data
+	Compress   string            `yaml:"compress,omitempty"` // "zstd", "gzip", "none"
 	Label      string            `yaml:"label,omitempty"`
 	Message    string            `yaml:"message,omitempty"`
 	Files      []BackupFileEntry `yaml:"files"`
