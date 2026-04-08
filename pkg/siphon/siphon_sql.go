@@ -78,12 +78,7 @@ func (s *Siphon) executeSQLImpl(ctx context.Context, opts *ExecuteSQLOptions) (*
 	}
 
 	// 4. Create adaptor, connect.
-	factory := s.AdaptorFactory
-	if factory == nil {
-		factory = engine.NewAdaptor
-	}
-
-	adaptor, err := factory(cc)
+	adaptor, err := s.createAdaptor(cc)
 	if err != nil {
 		return nil, fmt.Errorf("creating adaptor: %w", err)
 	}

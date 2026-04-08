@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
 	_ "modernc.org/sqlite"
 )
 
@@ -15,6 +14,9 @@ import (
 var (
 	_ Adaptor           = (*SQLiteAdaptor)(nil)
 	_ FileBackupAdaptor = (*SQLiteAdaptor)(nil)
+	_ QueryAdaptor      = (*SQLiteAdaptor)(nil)
+	_ TransferAdaptor   = (*SQLiteAdaptor)(nil)
+	_ RawDBAccessor     = (*SQLiteAdaptor)(nil)
 )
 
 // SQLiteAdaptor implements the Adaptor interface for SQLite.
@@ -112,6 +114,97 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("copying %s to %s: %w", src, dst, err)
 	}
 	return out.Close()
+}
+
+func (a *SQLiteAdaptor) RawDB() *sql.DB {
+	return a.db
+}
+
+// --- TransferAdaptor ---
+
+func (a *SQLiteAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	rows, err := a.db.QueryContext(ctx,
+		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+		tables = append(tables, name)
+	}
+	return tables, rows.Err()
+}
+
+func (a *SQLiteAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	tables, err := a.ListTables(ctx, database)
+	if err != nil {
+		return nil, err
+	}
+
+	var fks []ForeignKey
+	for _, table := range tables {
+		rows, err := a.db.QueryContext(ctx, fmt.Sprintf("PRAGMA foreign_key_list(%s)", table))
+		if err != nil {
+			continue
+		}
+		for rows.Next() {
+			var id, seq int
+			var refTable, from, to, onUpdate, onDelete, match string
+			if err := rows.Scan(&id, &seq, &refTable, &from, &to, &onUpdate, &onDelete, &match); err != nil {
+				rows.Close()
+				continue
+			}
+			fks = append(fks, ForeignKey{
+				Table:           table,
+				ReferencedTable: refTable,
+			})
+		}
+		rows.Close()
+	}
+	return fks, nil
+}
+
+func (a *SQLiteAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {
+	if a.db == nil {
+		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	if opts.SourceDB == nil {
+		return fmt.Errorf("%w: source database connection required", ErrTransferFailed)
+	}
+	return transferTablesSQL(ctx, opts.SourceDB, a.db, opts, "sqlite")
+}
+
+// --- QueryAdaptor ---
+
+func (a *SQLiteAdaptor) Execute(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	return a.db.ExecContext(ctx, query, args...)
+}
+
+func (a *SQLiteAdaptor) Query(ctx context.Context, query string, args ...any) (*QueryResult, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	rows, err := a.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer rows.Close()
+	return scanQueryResult(rows)
 }
 
 // filePath returns the configured SQLite file path.

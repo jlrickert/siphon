@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 
@@ -15,6 +16,9 @@ var (
 	_ Adaptor               = (*MariaDBAdaptor)(nil)
 	_ PhysicalBackupAdaptor = (*MariaDBAdaptor)(nil)
 	_ LogicalBackupAdaptor  = (*MariaDBAdaptor)(nil)
+	_ QueryAdaptor          = (*MariaDBAdaptor)(nil)
+	_ TransferAdaptor       = (*MariaDBAdaptor)(nil)
+	_ RawDBAccessor         = (*MariaDBAdaptor)(nil)
 )
 
 // MariaDBAdaptor implements the Adaptor interface for MariaDB/MySQL.
@@ -159,6 +163,18 @@ func (a *MariaDBAdaptor) Dump(ctx context.Context, opts DumpOptions) error {
 		}
 		return nil
 	}
+	if opts.OutputPath != "" {
+		f, err := os.Create(opts.OutputPath)
+		if err != nil {
+			return fmt.Errorf("%w: creating output file: %v", ErrDumpFailed, err)
+		}
+		defer f.Close()
+		cmd.Stdout = f
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%w: mariadb-dump: %v", ErrDumpFailed, err)
+		}
+		return nil
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: mariadb-dump: %s: %v", ErrDumpFailed, string(output), err)
@@ -188,12 +204,110 @@ func (a *MariaDBAdaptor) LoadDump(ctx context.Context, opts LoadDumpOptions) err
 	cmd := exec.CommandContext(ctx, "mariadb", args...)
 	if opts.Input != nil {
 		cmd.Stdin = opts.Input
+	} else if opts.InputPath != "" {
+		f, err := os.Open(opts.InputPath)
+		if err != nil {
+			return fmt.Errorf("%w: opening input file: %v", ErrLoadFailed, err)
+		}
+		defer f.Close()
+		cmd.Stdin = f
 	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: mariadb load: %s: %v", ErrLoadFailed, string(output), err)
 	}
 	return nil
+}
+
+func (a *MariaDBAdaptor) RawDB() *sql.DB {
+	return a.db
+}
+
+// --- TransferAdaptor ---
+
+func (a *MariaDBAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	query := "SHOW TABLES"
+	if database != "" {
+		query = fmt.Sprintf("SHOW TABLES FROM %s", database)
+	}
+	rows, err := a.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+		tables = append(tables, name)
+	}
+	return tables, rows.Err()
+}
+
+func (a *MariaDBAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	query := `SELECT TABLE_NAME, REFERENCED_TABLE_NAME
+		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+		WHERE REFERENCED_TABLE_NAME IS NOT NULL
+		AND TABLE_SCHEMA = ?`
+	db := database
+	if db == "" && a.cfg.Database != nil {
+		db = *a.cfg.Database
+	}
+	rows, err := a.db.QueryContext(ctx, query, db)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer rows.Close()
+
+	var fks []ForeignKey
+	for rows.Next() {
+		var fk ForeignKey
+		if err := rows.Scan(&fk.Table, &fk.ReferencedTable); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+		}
+		fks = append(fks, fk)
+	}
+	return fks, rows.Err()
+}
+
+func (a *MariaDBAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {
+	if a.db == nil {
+		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	if opts.SourceDB == nil {
+		return fmt.Errorf("%w: source database connection required", ErrTransferFailed)
+	}
+	return transferTablesSQL(ctx, opts.SourceDB, a.db, opts, "mariadb")
+}
+
+// --- QueryAdaptor ---
+
+func (a *MariaDBAdaptor) Execute(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	return a.db.ExecContext(ctx, query, args...)
+}
+
+func (a *MariaDBAdaptor) Query(ctx context.Context, query string, args ...any) (*QueryResult, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	}
+	rows, err := a.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
+	}
+	defer rows.Close()
+	return scanQueryResult(rows)
 }
 
 // buildDSN constructs a MySQL DSN from the connection configuration.

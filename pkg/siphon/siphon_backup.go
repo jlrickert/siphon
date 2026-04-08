@@ -29,11 +29,7 @@ func (s *Siphon) backupImpl(ctx context.Context, opts *BackupOptions) (*BackupDe
 	}
 
 	// 2. Create adaptor via factory.
-	factory := s.AdaptorFactory
-	if factory == nil {
-		factory = engine.NewAdaptor
-	}
-	adaptor, err := factory(cc)
+	adaptor, err := s.createAdaptor(cc)
 	if err != nil {
 		return nil, fmt.Errorf("creating adaptor: %w", err)
 	}

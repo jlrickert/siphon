@@ -127,7 +127,7 @@ func ConnectPostgreSQL(t *testing.T) engine.Adaptor {
 
 // isPortReachable attempts a TCP connection to host:port with a short timeout.
 func isPortReachable(host string, port int) bool {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, fmt.Sprintf("%d", port))
 	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
 	if err != nil {
 		return false

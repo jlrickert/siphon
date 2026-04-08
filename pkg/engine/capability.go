@@ -1,5 +1,7 @@
 package engine
 
+import "database/sql"
+
 // HasLogicalBackup checks whether an adaptor supports logical backup.
 func HasLogicalBackup(a Adaptor) (LogicalBackupAdaptor, bool) {
 	lb, ok := a.(LogicalBackupAdaptor)
@@ -28,4 +30,15 @@ func HasTransfer(a Adaptor) (TransferAdaptor, bool) {
 func HasQuery(a Adaptor) (QueryAdaptor, bool) {
 	qa, ok := a.(QueryAdaptor)
 	return qa, ok
+}
+
+// RawDBAccessor exposes the underlying *sql.DB for cross-adaptor data transfer.
+type RawDBAccessor interface {
+	RawDB() *sql.DB
+}
+
+// HasRawDB checks whether an adaptor exposes a raw *sql.DB connection.
+func HasRawDB(a Adaptor) (RawDBAccessor, bool) {
+	r, ok := a.(RawDBAccessor)
+	return r, ok
 }

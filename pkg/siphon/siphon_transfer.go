@@ -78,18 +78,13 @@ func (s *Siphon) transferImpl(ctx context.Context, opts *TransferOptions) error 
 	}
 
 	// 4. Create adaptors for both, connect.
-	factory := s.AdaptorFactory
-	if factory == nil {
-		factory = engine.NewAdaptor
-	}
-
-	srcAdaptor, err := factory(srcCfg)
+	srcAdaptor, err := s.createAdaptor(srcCfg)
 	if err != nil {
 		return fmt.Errorf("creating source adaptor: %w", err)
 	}
 	defer srcAdaptor.Close()
 
-	tgtAdaptor, err := factory(tgtCfg)
+	tgtAdaptor, err := s.createAdaptor(tgtCfg)
 	if err != nil {
 		return fmt.Errorf("creating target adaptor: %w", err)
 	}
@@ -197,6 +192,11 @@ func (s *Siphon) transferImpl(ctx context.Context, opts *TransferOptions) error 
 		},
 		Tables:     orderedTables,
 		OnConflict: onConflict,
+	}
+
+	// Pass source DB connection for cross-adaptor data transfer.
+	if srcRaw, ok := engine.HasRawDB(srcAdaptor); ok {
+		transferOpts.SourceDB = srcRaw.RawDB()
 	}
 
 	if err := tgtTransfer.TransferTables(ctx, transferOpts); err != nil {

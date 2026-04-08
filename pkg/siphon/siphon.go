@@ -71,6 +71,34 @@ func New(opts SiphonOptions) (*Siphon, error) {
 	}, nil
 }
 
+// createAdaptor resolves PasswordEnv via Runtime and creates an engine adaptor.
+func (s *Siphon) createAdaptor(cfg *engine.ConnectionConfig) (engine.Adaptor, error) {
+	resolved := s.resolvePasswordEnv(cfg)
+	factory := s.AdaptorFactory
+	if factory == nil {
+		factory = engine.NewAdaptor
+	}
+	return factory(resolved)
+}
+
+// resolvePasswordEnv returns a copy of cfg with Password populated from the
+// environment variable named by PasswordEnv, using Runtime for env access.
+func (s *Siphon) resolvePasswordEnv(cfg *engine.ConnectionConfig) *engine.ConnectionConfig {
+	if cfg.PasswordEnv == nil || *cfg.PasswordEnv == "" {
+		return cfg
+	}
+	if cfg.Password != nil && *cfg.Password != "" {
+		return cfg
+	}
+	envVal := s.Runtime.Env().Get(*cfg.PasswordEnv)
+	if envVal == "" {
+		return cfg
+	}
+	cp := *cfg
+	cp.Password = &envVal
+	return &cp
+}
+
 // --- Connection management ---
 
 // ListConnectionsOptions configures listing connections.
@@ -263,11 +291,7 @@ func (s *Siphon) TestConnection(ctx context.Context, opts *TestConnectionOptions
 		return ErrConnectionNotFound
 	}
 
-	factory := s.AdaptorFactory
-	if factory == nil {
-		factory = engine.NewAdaptor
-	}
-	adaptor, err := factory(cc)
+	adaptor, err := s.createAdaptor(cc)
 	if err != nil {
 		return fmt.Errorf("creating adaptor: %w", err)
 	}

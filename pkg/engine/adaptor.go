@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 )
 
@@ -102,11 +103,50 @@ type TransferOptions struct {
 	Source      DatabaseTarget
 	Destination DatabaseTarget
 	Tables      []string
-	OnConflict  string // "skip", "overwrite", "merge"
+	OnConflict  string  // "skip", "overwrite", "merge"
+	SourceDB    *sql.DB // source database connection for reading data
 }
 
 // QueryResult holds the result of a query execution.
 type QueryResult struct {
 	Columns []string
 	Rows    [][]string
+}
+
+// scanQueryResult scans sql.Rows into a QueryResult, converting all values
+// to their string representation. Shared by all adaptors that use *sql.DB.
+func scanQueryResult(rows *sql.Rows) (*QueryResult, error) {
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading columns: %v", ErrQueryFailed, err)
+	}
+
+	result := &QueryResult{Columns: columns}
+	values := make([]any, len(columns))
+	ptrs := make([]any, len(columns))
+	for i := range values {
+		ptrs[i] = &values[i]
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("%w: scanning row: %v", ErrQueryFailed, err)
+		}
+		row := make([]string, len(columns))
+		for i, v := range values {
+			switch v := v.(type) {
+			case nil:
+				row[i] = "NULL"
+			case []byte:
+				row[i] = string(v)
+			default:
+				row[i] = fmt.Sprintf("%v", v)
+			}
+		}
+		result.Rows = append(result.Rows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: iterating rows: %v", ErrQueryFailed, err)
+	}
+	return result, nil
 }

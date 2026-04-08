@@ -106,11 +106,7 @@ func (s *Siphon) restoreImpl(ctx context.Context, opts *RestoreOptions) error {
 	}
 
 	// 6. Create adaptor via factory.
-	factory := s.AdaptorFactory
-	if factory == nil {
-		factory = engine.NewAdaptor
-	}
-	adaptor, err := factory(cc)
+	adaptor, err := s.createAdaptor(cc)
 	if err != nil {
 		return fmt.Errorf("creating adaptor: %w", err)
 	}

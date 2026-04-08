@@ -38,22 +38,21 @@ func TestTransferMariaDBToPostgreSQL(t *testing.T) {
 	_, err = pqa.Execute(ctx, "CREATE TABLE IF NOT EXISTS transfer_test (id INT PRIMARY KEY, name VARCHAR(100))")
 	require.NoError(t, err)
 
-	// Perform transfer via TransferAdaptor if available.
-	mta, ok := engine.HasTransfer(mariaAdaptor)
-	require.True(t, ok, "MariaDB adaptor must support transfer")
+	// Perform transfer via target's TransferAdaptor with source's raw DB.
+	pta, ok := engine.HasTransfer(pgAdaptor)
+	require.True(t, ok, "PostgreSQL adaptor must support transfer")
 
-	err = mta.TransferTables(ctx, engine.TransferOptions{
+	srcRaw, ok := engine.HasRawDB(mariaAdaptor)
+	require.True(t, ok, "MariaDB adaptor must expose raw DB")
+
+	err = pta.TransferTables(ctx, engine.TransferOptions{
 		Source:      engine.DatabaseTarget{Connection: "test-mariadb", Database: MariaDBDatabase},
 		Destination: engine.DatabaseTarget{Connection: "test-postgresql", Database: PostgreSQLDatabase},
 		Tables:      []string{"transfer_test"},
 		OnConflict:  "skip",
+		SourceDB:    srcRaw.RawDB(),
 	})
-	// Transfer between different engine types may require the service layer.
-	// If the engine adaptor doesn't support cross-engine transfer directly,
-	// this is expected to fail. Log and skip in that case.
-	if err != nil {
-		t.Skipf("cross-engine transfer not supported at adaptor level: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Verify data arrived in PostgreSQL.
 	result, err := pqa.Query(ctx, "SELECT id, name FROM transfer_test ORDER BY id")
