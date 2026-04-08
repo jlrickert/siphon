@@ -3,7 +3,6 @@ package siphon
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"text/template"
 )
@@ -66,12 +65,8 @@ func GeneratePlist(cfg LaunchdConfig) ([]byte, error) {
 }
 
 // LaunchAgentsDir returns the standard macOS LaunchAgents directory for the
-// current user.
-func LaunchAgentsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "~"
-	}
+// given home directory.
+func LaunchAgentsDir(home string) string {
 	return filepath.Join(home, "Library", "LaunchAgents")
 }
 

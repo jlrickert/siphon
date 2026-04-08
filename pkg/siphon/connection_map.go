@@ -13,7 +13,7 @@ import (
 //   - Mode "regex": checks if workDir matches the entry's Match regex pattern.
 //
 // Entries are evaluated in order; first match wins.
-func ResolveConnectionMap(entries []ConnectionMapEntry, workDir string) string {
+func ResolveConnectionMap(entries []ConnectionMapEntry, workDir, home string) string {
 	for _, entry := range entries {
 		mode := "prefix"
 		if entry.Mode != nil && *entry.Mode != "" {
@@ -25,7 +25,7 @@ func ResolveConnectionMap(entries []ConnectionMapEntry, workDir string) string {
 			if entry.Prefix == nil || *entry.Prefix == "" {
 				continue
 			}
-			prefix := *entry.Prefix
+			prefix := ExpandPath(*entry.Prefix, home)
 			// Normalize: ensure prefix ends with / for proper directory matching.
 			if !strings.HasSuffix(prefix, "/") {
 				prefix += "/"

@@ -27,7 +27,7 @@ func (s *Siphon) restoreImpl(ctx context.Context, opts *RestoreOptions) error {
 	}
 
 	if strings.HasPrefix(backupPath, "@") {
-		resolved, err := ResolveRepoPath(cfg, backupPath)
+		resolved, err := ResolveRepoPath(cfg, backupPath, s.home())
 		if err != nil {
 			return fmt.Errorf("resolving path: %w", err)
 		}

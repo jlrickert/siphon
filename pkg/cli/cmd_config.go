@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 
 	"github.com/jlrickert/siphon/pkg/siphon"
@@ -169,18 +168,19 @@ func newConfigEditCmd(deps *Deps) *cobra.Command {
 				return err
 			}
 
-			editor := os.Getenv("VISUAL")
+			rt := deps.Runtime
+			editor := rt.Env().Get("VISUAL")
 			if editor == "" {
-				editor = os.Getenv("EDITOR")
+				editor = rt.Env().Get("EDITOR")
 			}
 			if editor == "" {
 				editor = "vi"
 			}
 
 			editorCmd := exec.CommandContext(cmd.Context(), editor, result.Path)
-			editorCmd.Stdin = os.Stdin
-			editorCmd.Stdout = os.Stdout
-			editorCmd.Stderr = os.Stderr
+			editorCmd.Stdin = rt.Stream().In
+			editorCmd.Stdout = rt.Stream().Out
+			editorCmd.Stderr = rt.Stream().Err
 			return editorCmd.Run()
 		},
 	}

@@ -76,7 +76,7 @@ func (s *Siphon) backupImpl(ctx context.Context, opts *BackupOptions) (*BackupDe
 	// 7. Create target directory.
 	var backupDir string
 	if opts.Repo != "" {
-		repoPath, err := ResolveRepoPath(cfg, "@"+opts.Repo)
+		repoPath, err := ResolveRepoPath(cfg, "@"+opts.Repo, s.home())
 		if err != nil {
 			return nil, fmt.Errorf("resolving repo: %w", err)
 		}
@@ -238,7 +238,7 @@ func (s *Siphon) backupInfoImpl(ctx context.Context, opts *BackupInfoOptions) (*
 
 	// Resolve @repo syntax.
 	if strings.HasPrefix(backupPath, "@") {
-		resolved, err := ResolveRepoPath(cfg, backupPath)
+		resolved, err := ResolveRepoPath(cfg, backupPath, s.home())
 		if err != nil {
 			return nil, fmt.Errorf("resolving path: %w", err)
 		}
@@ -264,7 +264,7 @@ func (s *Siphon) listBackupsImpl(ctx context.Context, opts *ListBackupsOptions) 
 	// Determine base directory to search.
 	searchDir := "."
 	if opts.Repo != "" {
-		resolved, err := ResolveRepoPath(cfg, "@"+opts.Repo)
+		resolved, err := ResolveRepoPath(cfg, "@"+opts.Repo, s.home())
 		if err != nil {
 			return nil, fmt.Errorf("resolving repo: %w", err)
 		}
@@ -332,7 +332,7 @@ func (s *Siphon) verifyBackupImpl(ctx context.Context, opts *VerifyBackupOptions
 	}
 
 	if strings.HasPrefix(backupPath, "@") {
-		resolved, err := ResolveRepoPath(cfg, backupPath)
+		resolved, err := ResolveRepoPath(cfg, backupPath, s.home())
 		if err != nil {
 			return fmt.Errorf("resolving path: %w", err)
 		}
@@ -373,7 +373,7 @@ func (s *Siphon) labelBackupImpl(ctx context.Context, opts *LabelBackupOptions) 
 
 	backupPath := opts.BackupID
 	if strings.HasPrefix(backupPath, "@") {
-		resolved, err := ResolveRepoPath(cfg, backupPath)
+		resolved, err := ResolveRepoPath(cfg, backupPath, s.home())
 		if err != nil {
 			return fmt.Errorf("resolving path: %w", err)
 		}

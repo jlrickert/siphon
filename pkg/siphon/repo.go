@@ -8,8 +8,9 @@ import (
 
 // ResolveRepoPath resolves a backup path that may use @repo syntax.
 // For example, "@nightly/mydb-2026-04-02" resolves the "nightly" repo
-// from config and appends the subpath.
-func ResolveRepoPath(cfg *Config, raw string) (string, error) {
+// from config and appends the subpath. The home parameter is used for
+// tilde expansion on resolved repo paths.
+func ResolveRepoPath(cfg *Config, raw, home string) (string, error) {
 	if !strings.HasPrefix(raw, "@") {
 		return raw, nil
 	}
@@ -36,8 +37,9 @@ func ResolveRepoPath(cfg *Config, raw string) (string, error) {
 		return "", fmt.Errorf("repo %q has no path configured", repoName)
 	}
 
+	repoPath := ExpandPath(*repo.Path, home)
 	if subpath == "" {
-		return *repo.Path, nil
+		return repoPath, nil
 	}
-	return filepath.Join(*repo.Path, subpath), nil
+	return filepath.Join(repoPath, subpath), nil
 }

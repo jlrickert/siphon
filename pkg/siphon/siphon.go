@@ -71,14 +71,39 @@ func New(opts SiphonOptions) (*Siphon, error) {
 	}, nil
 }
 
-// createAdaptor resolves PasswordEnv via Runtime and creates an engine adaptor.
+// home returns the user's home directory via Runtime.
+func (s *Siphon) home() string {
+	home, err := s.Runtime.GetHome()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+// createAdaptor resolves PasswordEnv and expands ~ in Path via Runtime, then
+// creates an engine adaptor.
 func (s *Siphon) createAdaptor(cfg *engine.ConnectionConfig) (engine.Adaptor, error) {
 	resolved := s.resolvePasswordEnv(cfg)
+	resolved = expandConnectionPaths(resolved, s.home())
 	factory := s.AdaptorFactory
 	if factory == nil {
 		factory = engine.NewAdaptor
 	}
 	return factory(resolved)
+}
+
+// expandConnectionPaths returns a copy of cfg with ~ expanded in path fields.
+func expandConnectionPaths(cfg *engine.ConnectionConfig, home string) *engine.ConnectionConfig {
+	if cfg.Path == nil {
+		return cfg
+	}
+	expanded := ExpandPath(*cfg.Path, home)
+	if expanded == *cfg.Path {
+		return cfg
+	}
+	cp := *cfg
+	cp.Path = &expanded
+	return &cp
 }
 
 // resolvePasswordEnv returns a copy of cfg with Password populated from the

@@ -257,7 +257,7 @@ func (s *Siphon) installLaunchd(name, siphonBin string, args []string, hour, min
 		// default: just Hour and Minute
 	}
 
-	home, _ := os.UserHomeDir()
+	home := s.home()
 	logDir := filepath.Join(home, "Library", "Logs", "siphon")
 	plistCfg := LaunchdConfig{
 		Label:                 PlistLabel(name),
@@ -273,7 +273,7 @@ func (s *Siphon) installLaunchd(name, siphonBin string, args []string, hour, min
 		return err
 	}
 
-	dir := LaunchAgentsDir()
+	dir := LaunchAgentsDir(s.home())
 	plistPath := filepath.Join(dir, PlistFilename(name))
 
 	if err := s.Runtime.Mkdir(dir, 0o755, true); err != nil {
@@ -324,7 +324,7 @@ func (s *Siphon) installCron(name, siphonBin string, args []string, hour, minute
 
 // uninstallLaunchd removes the plist file for a schedule.
 func (s *Siphon) uninstallLaunchd(name string) error {
-	dir := LaunchAgentsDir()
+	dir := LaunchAgentsDir(s.home())
 	plistPath := filepath.Join(dir, PlistFilename(name))
 
 	if err := s.Runtime.Remove(plistPath, false); err != nil && !os.IsNotExist(err) {
@@ -337,7 +337,7 @@ func (s *Siphon) uninstallLaunchd(name string) error {
 func (s *Siphon) isScheduleActive(name, backend string) bool {
 	switch backend {
 	case "launchd":
-		dir := LaunchAgentsDir()
+		dir := LaunchAgentsDir(s.home())
 		plistPath := filepath.Join(dir, PlistFilename(name))
 		_, err := s.Runtime.Stat(plistPath, false)
 		return err == nil
