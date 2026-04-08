@@ -20,8 +20,8 @@ type ConfigLoadWarning struct {
 }
 
 // ConfigService loads, merges, and resolves siphon configuration state using
-// a five-tier cfgcascade: defaults (0), env vars (10), user config (20),
-// project config (30), CLI flags (40).
+// a four-tier cfgcascade: user config (1), project config (2), local config (3),
+// env vars (4). CLI flags are handled outside the cascade.
 type ConfigService struct {
 	Runtime     *toolkit.Runtime
 	PathService *PathService
@@ -37,6 +37,7 @@ type ConfigService struct {
 	// Cached configs.
 	userCache    *Config
 	projectCache *Config
+	localCache   *Config
 	mergedCache  *Config
 }
 
@@ -57,6 +58,7 @@ func (s *ConfigService) ResetCache() {
 	s.mergedCache = nil
 	s.userCache = nil
 	s.projectCache = nil
+	s.localCache = nil
 	s.LoadWarnings = nil
 	s.ResolvedSources = nil
 }
@@ -88,6 +90,19 @@ func (s *ConfigService) ProjectConfig(cache bool) (*Config, error) {
 	return cfg, nil
 }
 
+// LocalConfig returns the local (gitignored) configuration.
+func (s *ConfigService) LocalConfig(cache bool) (*Config, error) {
+	if cache && s.localCache != nil {
+		return s.localCache, nil
+	}
+	cfg, err := ReadConfig(s.Runtime, s.PathService.LocalConfig())
+	if err != nil {
+		return nil, err
+	}
+	s.localCache = cfg
+	return cfg, nil
+}
+
 // Config returns the merged configuration from all tiers.
 func (s *ConfigService) Config(cache bool) (*Config, error) {
 	if cache && s.mergedCache != nil {
@@ -110,6 +125,7 @@ func (s *ConfigService) Config(cache bool) (*Config, error) {
 
 	userPath := filepath.Join(s.PathService.ConfigRoot, "config.yaml")
 	projectPath := filepath.Join(s.PathService.LocalConfigRoot, "config.yaml")
+	localPath := s.PathService.LocalConfig()
 
 	cascade := &cfgcascade.Cascade[*Config]{
 		Layers: []cfgcascade.Layer[*Config]{
@@ -148,6 +164,22 @@ func (s *ConfigService) Config(cache bool) (*Config, error) {
 			{
 				Rank: 3,
 				Provider: &cfgcascade.FuncProvider[*Config]{
+					ProviderName: "local config",
+					Fn: func(_ func(string) string) (*Config, error) {
+						cfg, err := s.LocalConfig(cache)
+						if err != nil {
+							if errors.Is(err, os.ErrNotExist) {
+								return nil, os.ErrNotExist
+							}
+							return nil, err
+						}
+						return cfg, nil
+					},
+				},
+			},
+			{
+				Rank: 4,
+				Provider: &cfgcascade.FuncProvider[*Config]{
 					ProviderName: "env vars",
 					Fn: func(getenv func(string) string) (*Config, error) {
 						envProvider := &cfgcascade.EnvProvider{
@@ -183,6 +215,8 @@ func (s *ConfigService) Config(cache bool) (*Config, error) {
 			path = userPath
 		case "project config":
 			path = projectPath
+		case "local config":
+			path = localPath
 		}
 		s.LoadWarnings = append(s.LoadWarnings, ConfigLoadWarning{
 			Source:  pe.Name,

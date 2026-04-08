@@ -36,3 +36,8 @@ func (s *PathService) ProjectConfig() string {
 func (s *PathService) UserConfig() string {
 	return filepath.Join(s.ConfigRoot, "config.yaml")
 }
+
+// LocalConfig returns the path to the local (gitignored) config file.
+func (s *PathService) LocalConfig() string {
+	return filepath.Join(s.LocalConfigRoot, "config.local.yaml")
+}

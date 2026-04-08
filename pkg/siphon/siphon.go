@@ -583,49 +583,45 @@ func buildProvenance(cs *ConfigService) map[string]string {
 		break // Most specific source wins for the summary.
 	}
 
-	// Build detailed provenance by comparing each tier.
+	// Build detailed provenance by comparing each tier. Most-specific first:
+	// local config overrides project config overrides user config.
 	userCfg, _ := cs.UserConfig(true)
 	projectCfg, _ := cs.ProjectConfig(true)
+	localCfg, _ := cs.LocalConfig(true)
 
-	if projectCfg != nil {
-		if projectCfg.DefaultConnection != nil {
-			prov["default_connection"] = "project config"
-		}
-		if projectCfg.LogFile != nil {
-			prov["log_file"] = "project config"
-		}
-		if projectCfg.LogLevel != nil {
-			prov["log_level"] = "project config"
-		}
-		if len(projectCfg.Connections) > 0 {
-			for name := range projectCfg.Connections {
-				prov["connections."+name] = "project config"
-			}
+	// Helper: set provenance for a field if not already set by a higher tier.
+	setIfAbsent := func(key, source string) {
+		if _, set := prov[key]; !set {
+			prov[key] = source
 		}
 	}
 
-	if userCfg != nil {
-		if userCfg.DefaultConnection != nil {
-			if _, set := prov["default_connection"]; !set {
-				prov["default_connection"] = "user config"
-			}
+	// Apply tiers most-specific first so higher tiers take precedence.
+	tiers := []struct {
+		cfg  *Config
+		name string
+	}{
+		{localCfg, "local config"},
+		{projectCfg, "project config"},
+		{userCfg, "user config"},
+	}
+
+	for _, tier := range tiers {
+		if tier.cfg == nil {
+			continue
 		}
-		if userCfg.LogFile != nil {
-			if _, set := prov["log_file"]; !set {
-				prov["log_file"] = "user config"
-			}
+		if tier.cfg.DefaultConnection != nil {
+			setIfAbsent("default_connection", tier.name)
 		}
-		if userCfg.LogLevel != nil {
-			if _, set := prov["log_level"]; !set {
-				prov["log_level"] = "user config"
-			}
+		if tier.cfg.LogFile != nil {
+			setIfAbsent("log_file", tier.name)
 		}
-		if len(userCfg.Connections) > 0 {
-			for name := range userCfg.Connections {
-				key := "connections." + name
-				if _, set := prov[key]; !set {
-					prov[key] = "user config"
-				}
+		if tier.cfg.LogLevel != nil {
+			setIfAbsent("log_level", tier.name)
+		}
+		if len(tier.cfg.Connections) > 0 {
+			for name := range tier.cfg.Connections {
+				setIfAbsent("connections."+name, tier.name)
 			}
 		}
 	}
