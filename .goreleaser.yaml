@@ -23,8 +23,28 @@ archives:
   - id: siphon
     builds:
       - siphon
-    format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, README.md, CHANGELOG.md]
+
+brews:
+  - ids: [siphon]
+    name: siphon
+    repository:
+      owner: jlrickert
+      name: homebrew-formulae
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/jlrickert/siphon"
+    description: "Database backup, restore, transfer, and management tool"
+    license: "Apache-2.0"
+    install: |
+      bin.install "siphon"
+      generate_completions_from_executable(bin/"siphon", "completion")
+    test: |
+      system "#{bin}/siphon", "--version"
 
 checksum:
   name_template: "checksums.txt"
@@ -33,5 +53,11 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
+      - "^chore\\(release\\)"
+      - "^chore: release"
+      - "^Merge"
+
+release:
+  footer: |
+    ---
+    Released with [GoReleaser](https://goreleaser.com).
