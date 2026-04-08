@@ -77,7 +77,9 @@ type ConnectionMapEntry struct {
 }
 
 // MergeConfig merges overlay on top of base. Scalars use pointer-based
-// override; maps use recursive deep merge; lists append with dedup.
+// override; maps use field-level deep merge for ConnectionConfig, RepoConfig,
+// and PolicyConfig; ScheduleConfig and TableGroup use key-level replacement
+// (last-wins-per-key); ConnectionMap uses append-with-dedup.
 func MergeConfig(base, overlay *Config) *Config {
 	if base == nil {
 		return overlay
@@ -110,10 +112,12 @@ func MergeConfig(base, overlay *Config) *Config {
 		merged.BackupNameFormat = overlay.BackupNameFormat
 	}
 
-	// Deep-merge maps.
-	merged.Connections = mergeMaps(base.Connections, overlay.Connections)
-	merged.Repos = mergeMaps(base.Repos, overlay.Repos)
-	merged.Policies = mergeMaps(base.Policies, overlay.Policies)
+	// Field-level deep merge for types with pointer-based override fields.
+	merged.Connections = mergeConnectionConfigs(base.Connections, overlay.Connections)
+	merged.Repos = mergeRepoConfigs(base.Repos, overlay.Repos)
+	merged.Policies = mergePolicyConfigs(base.Policies, overlay.Policies)
+
+	// Key-level replacement for self-contained entry types.
 	merged.TableGroups = mergeMaps(base.TableGroups, overlay.TableGroups)
 	merged.Schedules = mergeMaps(base.Schedules, overlay.Schedules)
 
@@ -136,7 +140,149 @@ func MergeConfig(base, overlay *Config) *Config {
 	return &merged
 }
 
-// mergeMaps merges two maps, with overlay values taking precedence.
+// mergeConnectionConfigs deep-merges two connection maps. For matching keys,
+// individual pointer fields from the overlay override the base; nil fields in
+// the overlay preserve the base value.
+func mergeConnectionConfigs(base, overlay map[string]*engine.ConnectionConfig) map[string]*engine.ConnectionConfig {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	result := make(map[string]*engine.ConnectionConfig)
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, ov := range overlay {
+		bv, exists := result[k]
+		if !exists || bv == nil {
+			result[k] = ov
+			continue
+		}
+		if ov == nil {
+			continue
+		}
+		merged := *bv
+		if ov.Name != "" {
+			merged.Name = ov.Name
+		}
+		if ov.Engine != "" {
+			merged.Engine = ov.Engine
+		}
+		if ov.Host != nil {
+			merged.Host = ov.Host
+		}
+		if ov.Port != nil {
+			merged.Port = ov.Port
+		}
+		if ov.User != nil {
+			merged.User = ov.User
+		}
+		if ov.Password != nil {
+			merged.Password = ov.Password
+		}
+		if ov.PasswordEnv != nil {
+			merged.PasswordEnv = ov.PasswordEnv
+		}
+		if ov.Database != nil {
+			merged.Database = ov.Database
+		}
+		if ov.Path != nil {
+			merged.Path = ov.Path
+		}
+		result[k] = &merged
+	}
+	return result
+}
+
+// mergeRepoConfigs deep-merges two repo maps. For matching keys, individual
+// pointer fields from the overlay override the base.
+func mergeRepoConfigs(base, overlay map[string]*RepoConfig) map[string]*RepoConfig {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	result := make(map[string]*RepoConfig)
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, ov := range overlay {
+		bv, exists := result[k]
+		if !exists || bv == nil {
+			result[k] = ov
+			continue
+		}
+		if ov == nil {
+			continue
+		}
+		merged := *bv
+		if ov.Path != nil {
+			merged.Path = ov.Path
+		}
+		if ov.Type != nil {
+			merged.Type = ov.Type
+		}
+		if ov.Compress != nil {
+			merged.Compress = ov.Compress
+		}
+		if ov.Encrypt != nil {
+			merged.Encrypt = ov.Encrypt
+		}
+		result[k] = &merged
+	}
+	return result
+}
+
+// mergePolicyConfigs deep-merges two policy maps. For matching keys, individual
+// pointer fields from the overlay override the base. DenyDatabases slices from
+// the overlay replace the base (not appended).
+func mergePolicyConfigs(base, overlay map[string]*PolicyConfig) map[string]*PolicyConfig {
+	if len(base) == 0 && len(overlay) == 0 {
+		return nil
+	}
+	result := make(map[string]*PolicyConfig)
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, ov := range overlay {
+		bv, exists := result[k]
+		if !exists || bv == nil {
+			result[k] = ov
+			continue
+		}
+		if ov == nil {
+			continue
+		}
+		merged := *bv
+		if ov.Connection != nil {
+			merged.Connection = ov.Connection
+		}
+		if ov.CLI != nil {
+			merged.CLI = ov.CLI
+		}
+		if ov.MCP != nil {
+			merged.MCP = ov.MCP
+		}
+		if ov.API != nil {
+			merged.API = ov.API
+		}
+		if ov.AllowRestore != nil {
+			merged.AllowRestore = ov.AllowRestore
+		}
+		if ov.AllowTransfer != nil {
+			merged.AllowTransfer = ov.AllowTransfer
+		}
+		if ov.AllowSQL != nil {
+			merged.AllowSQL = ov.AllowSQL
+		}
+		if len(ov.DenyDatabases) > 0 {
+			merged.DenyDatabases = ov.DenyDatabases
+		}
+		result[k] = &merged
+	}
+	return result
+}
+
+// mergeMaps merges two maps, with overlay values taking precedence (key-level
+// replacement). Used for ScheduleConfig and TableGroup where entries are
+// self-contained and partial override doesn't apply.
 func mergeMaps[V any](base, overlay map[string]V) map[string]V {
 	if len(base) == 0 && len(overlay) == 0 {
 		return nil
