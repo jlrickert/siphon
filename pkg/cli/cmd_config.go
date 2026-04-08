@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 
 	"github.com/jlrickert/siphon/pkg/siphon"
 	"github.com/spf13/cobra"
@@ -54,6 +56,139 @@ func NewConfigCmd(deps *Deps) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&explain, "explain", false, "show per-field provenance")
+
+	cmd.AddCommand(newConfigInitCmd(deps))
+	cmd.AddCommand(newConfigTemplateCmd(deps))
+	cmd.AddCommand(newConfigEditCmd(deps))
+
+	return cmd
+}
+
+// resolveScope returns the ConfigScope from mutually exclusive flags.
+func resolveScope(user, project, local bool) (siphon.ConfigScope, error) {
+	count := 0
+	if user {
+		count++
+	}
+	if project {
+		count++
+	}
+	if local {
+		count++
+	}
+	if count == 0 {
+		return "", fmt.Errorf("one of --user, --project, or --local is required")
+	}
+	if count > 1 {
+		return "", fmt.Errorf("--user, --project, and --local are mutually exclusive")
+	}
+	switch {
+	case user:
+		return siphon.ConfigScopeUser, nil
+	case project:
+		return siphon.ConfigScopeProject, nil
+	default:
+		return siphon.ConfigScopeLocal, nil
+	}
+}
+
+func newConfigInitCmd(deps *Deps) *cobra.Command {
+	var (
+		user    bool
+		project bool
+		local   bool
+		force   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create a config file at the specified scope",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scope, err := resolveScope(user, project, local)
+			if err != nil {
+				return err
+			}
+
+			result, err := deps.Siphon.ConfigInit(cmd.Context(), &siphon.ConfigInitOptions{
+				Scope: scope,
+				Force: force,
+			})
+			if err != nil {
+				return err
+			}
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Created %s\n", result.Path)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&user, "user", false, "user config (~/.config/siphon/config.yaml)")
+	cmd.Flags().BoolVar(&project, "project", false, "project config (.siphon/config.yaml)")
+	cmd.Flags().BoolVar(&local, "local", false, "local config (.siphon/config.local.yaml, gitignored)")
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite if file exists")
+	cmd.MarkFlagsMutuallyExclusive("user", "project", "local")
+
+	return cmd
+}
+
+func newConfigTemplateCmd(deps *Deps) *cobra.Command {
+	return &cobra.Command{
+		Use:   "template",
+		Short: "Print an annotated config template to stdout",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tmpl, err := deps.Siphon.ConfigTemplate(cmd.Context(), &siphon.ConfigTemplateOptions{})
+			if err != nil {
+				return err
+			}
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), tmpl)
+			return nil
+		},
+	}
+}
+
+func newConfigEditCmd(deps *Deps) *cobra.Command {
+	var (
+		user    bool
+		project bool
+		local   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Open config file in $EDITOR",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			scope, err := resolveScope(user, project, local)
+			if err != nil {
+				return err
+			}
+
+			result, err := deps.Siphon.ConfigEdit(cmd.Context(), &siphon.ConfigEditOptions{
+				Scope: scope,
+			})
+			if err != nil {
+				return err
+			}
+
+			editor := os.Getenv("VISUAL")
+			if editor == "" {
+				editor = os.Getenv("EDITOR")
+			}
+			if editor == "" {
+				editor = "vi"
+			}
+
+			editorCmd := exec.CommandContext(cmd.Context(), editor, result.Path)
+			editorCmd.Stdin = os.Stdin
+			editorCmd.Stdout = os.Stdout
+			editorCmd.Stderr = os.Stderr
+			return editorCmd.Run()
+		},
+	}
+
+	cmd.Flags().BoolVar(&user, "user", false, "user config (~/.config/siphon/config.yaml)")
+	cmd.Flags().BoolVar(&project, "project", false, "project config (.siphon/config.yaml)")
+	cmd.Flags().BoolVar(&local, "local", false, "local config (.siphon/config.local.yaml, gitignored)")
+	cmd.MarkFlagsMutuallyExclusive("user", "project", "local")
 
 	return cmd
 }

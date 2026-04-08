@@ -50,13 +50,16 @@ var siphonMethodToSurfaces = map[string]struct {
 	"RemoveSchedule": {CLI: "schedule remove", MCP: "schedule_remove"},
 
 	// Config
-	"Config": {CLI: "config", MCP: "config"},
+	"Config":         {CLI: "config", MCP: "config"},
+	"ConfigInit":     {CLI: "config init", MCP: "config_init"},
+	"ConfigTemplate": {CLI: "config template", MCP: "config_template"},
 }
 
 // siphonMethodsExcluded lists Siphon methods that are intentionally excluded
 // from surface coverage checks.
 var siphonMethodsExcluded = map[string]string{
-	// Internal service accessors, not user-facing operations.
+	// CLI-only: opens $EDITOR interactively, no MCP equivalent.
+	"ConfigEdit": "CLI-only: interactive $EDITOR, no MCP equivalent",
 }
 
 // TestCoverage_AllSiphonMethodsHaveBothSurfaces uses reflection to enumerate
