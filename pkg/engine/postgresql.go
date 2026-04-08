@@ -23,13 +23,16 @@ var (
 
 // PostgreSQLAdaptor implements the Adaptor interface for PostgreSQL.
 type PostgreSQLAdaptor struct {
+	baseDBAdaptor
 	cfg *ConnectionConfig
-	db  *sql.DB
 }
 
 // NewPostgreSQLAdaptor creates a PostgreSQL adaptor from configuration.
 func NewPostgreSQLAdaptor(cfg *ConnectionConfig) *PostgreSQLAdaptor {
-	return &PostgreSQLAdaptor{cfg: cfg}
+	return &PostgreSQLAdaptor{
+		baseDBAdaptor: baseDBAdaptor{dialect: "postgresql"},
+		cfg:           cfg,
+	}
 }
 
 func (a *PostgreSQLAdaptor) Engine() Engine {
@@ -47,8 +50,8 @@ func (a *PostgreSQLAdaptor) Connect(ctx context.Context) error {
 }
 
 func (a *PostgreSQLAdaptor) Ping(ctx context.Context) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return err
 	}
 	return a.db.PingContext(ctx)
 }
@@ -61,8 +64,8 @@ func (a *PostgreSQLAdaptor) Close() error {
 }
 
 func (a *PostgreSQLAdaptor) ListDatabases(ctx context.Context) ([]string, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	rows, err := a.db.QueryContext(ctx, "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
 	if err != nil {
@@ -82,6 +85,9 @@ func (a *PostgreSQLAdaptor) ListDatabases(ctx context.Context) ([]string, error)
 }
 
 // --- LogicalBackupAdaptor ---
+// Note: Uses os.Create/os.Open directly because engine adaptors do not
+// receive toolkit.Runtime. This is a documented exception — engine-level
+// file I/O and external tool invocations bypass the Runtime abstraction.
 
 func (a *PostgreSQLAdaptor) Dump(ctx context.Context, opts DumpOptions) error {
 	args := []string{"-Fc"} // custom format
@@ -176,15 +182,12 @@ func (a *PostgreSQLAdaptor) LoadDump(ctx context.Context, opts LoadDumpOptions) 
 	return nil
 }
 
-func (a *PostgreSQLAdaptor) RawDB() *sql.DB {
-	return a.db
-}
-
-// --- TransferAdaptor ---
+// --- TransferAdaptor (ListTables, GetForeignKeys) ---
+// TransferTables is provided by the embedded baseDBAdaptor.
 
 func (a *PostgreSQLAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	rows, err := a.db.QueryContext(ctx,
 		"SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
@@ -205,8 +208,8 @@ func (a *PostgreSQLAdaptor) ListTables(ctx context.Context, database string) ([]
 }
 
 func (a *PostgreSQLAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	query := `SELECT tc.table_name, ccu.table_name AS referenced_table_name
 		FROM information_schema.table_constraints tc
@@ -230,37 +233,6 @@ func (a *PostgreSQLAdaptor) GetForeignKeys(ctx context.Context, database string)
 		fks = append(fks, fk)
 	}
 	return fks, rows.Err()
-}
-
-func (a *PostgreSQLAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	if opts.SourceDB == nil {
-		return fmt.Errorf("%w: source database connection required", ErrTransferFailed)
-	}
-	return transferTablesSQL(ctx, opts.SourceDB, a.db, opts, "postgresql")
-}
-
-// --- QueryAdaptor ---
-
-func (a *PostgreSQLAdaptor) Execute(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	return a.db.ExecContext(ctx, query, args...)
-}
-
-func (a *PostgreSQLAdaptor) Query(ctx context.Context, query string, args ...any) (*QueryResult, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	rows, err := a.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-	defer rows.Close()
-	return scanQueryResult(rows)
 }
 
 // buildDSN constructs a PostgreSQL connection string from the connection configuration.

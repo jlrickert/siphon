@@ -23,13 +23,16 @@ var (
 
 // MariaDBAdaptor implements the Adaptor interface for MariaDB/MySQL.
 type MariaDBAdaptor struct {
+	baseDBAdaptor
 	cfg *ConnectionConfig
-	db  *sql.DB
 }
 
 // NewMariaDBAdaptor creates a MariaDB adaptor from configuration.
 func NewMariaDBAdaptor(cfg *ConnectionConfig) *MariaDBAdaptor {
-	return &MariaDBAdaptor{cfg: cfg}
+	return &MariaDBAdaptor{
+		baseDBAdaptor: baseDBAdaptor{dialect: "mariadb"},
+		cfg:           cfg,
+	}
 }
 
 func (a *MariaDBAdaptor) Engine() Engine {
@@ -47,8 +50,8 @@ func (a *MariaDBAdaptor) Connect(ctx context.Context) error {
 }
 
 func (a *MariaDBAdaptor) Ping(ctx context.Context) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return err
 	}
 	return a.db.PingContext(ctx)
 }
@@ -61,8 +64,8 @@ func (a *MariaDBAdaptor) Close() error {
 }
 
 func (a *MariaDBAdaptor) ListDatabases(ctx context.Context) ([]string, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	rows, err := a.db.QueryContext(ctx, "SHOW DATABASES")
 	if err != nil {
@@ -135,6 +138,9 @@ func (a *MariaDBAdaptor) CopyBack(ctx context.Context, opts CopyBackOptions) err
 }
 
 // --- LogicalBackupAdaptor ---
+// Note: Uses os.Create/os.Open directly because engine adaptors do not
+// receive toolkit.Runtime. This is a documented exception — engine-level
+// file I/O and external tool invocations bypass the Runtime abstraction.
 
 func (a *MariaDBAdaptor) Dump(ctx context.Context, opts DumpOptions) error {
 	args := []string{"--single-transaction", "--routines", "--triggers"}
@@ -219,15 +225,12 @@ func (a *MariaDBAdaptor) LoadDump(ctx context.Context, opts LoadDumpOptions) err
 	return nil
 }
 
-func (a *MariaDBAdaptor) RawDB() *sql.DB {
-	return a.db
-}
-
-// --- TransferAdaptor ---
+// --- TransferAdaptor (ListTables, GetForeignKeys) ---
+// TransferTables is provided by the embedded baseDBAdaptor.
 
 func (a *MariaDBAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	query := "SHOW TABLES"
 	if database != "" {
@@ -251,8 +254,8 @@ func (a *MariaDBAdaptor) ListTables(ctx context.Context, database string) ([]str
 }
 
 func (a *MariaDBAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	query := `SELECT TABLE_NAME, REFERENCED_TABLE_NAME
 		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
@@ -277,37 +280,6 @@ func (a *MariaDBAdaptor) GetForeignKeys(ctx context.Context, database string) ([
 		fks = append(fks, fk)
 	}
 	return fks, rows.Err()
-}
-
-func (a *MariaDBAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	if opts.SourceDB == nil {
-		return fmt.Errorf("%w: source database connection required", ErrTransferFailed)
-	}
-	return transferTablesSQL(ctx, opts.SourceDB, a.db, opts, "mariadb")
-}
-
-// --- QueryAdaptor ---
-
-func (a *MariaDBAdaptor) Execute(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	return a.db.ExecContext(ctx, query, args...)
-}
-
-func (a *MariaDBAdaptor) Query(ctx context.Context, query string, args ...any) (*QueryResult, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	rows, err := a.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-	defer rows.Close()
-	return scanQueryResult(rows)
 }
 
 // buildDSN constructs a MySQL DSN from the connection configuration.

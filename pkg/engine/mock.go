@@ -14,6 +14,7 @@ var (
 	_ FileBackupAdaptor     = (*MockAdaptor)(nil)
 	_ TransferAdaptor       = (*MockAdaptor)(nil)
 	_ QueryAdaptor          = (*MockAdaptor)(nil)
+	_ RawDBAccessor         = (*MockAdaptor)(nil)
 )
 
 // MockAdaptor implements all engine capability interfaces for testing.
@@ -46,6 +47,8 @@ type MockAdaptor struct {
 	ForeignKeys []ForeignKey
 	ExecuteFn   func(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryFn     func(ctx context.Context, query string, args ...any) (*QueryResult, error)
+	RawDBFn     func() *sql.DB
+	DB          *sql.DB // configurable raw DB for transfer tests
 }
 
 // NewMockAdaptor returns a MockAdaptor with the given engine type.
@@ -172,6 +175,13 @@ func (m *MockAdaptor) Query(ctx context.Context, query string, args ...any) (*Qu
 		return m.QueryFn(ctx, query, args...)
 	}
 	return &QueryResult{}, nil
+}
+
+func (m *MockAdaptor) RawDB() *sql.DB {
+	if m.RawDBFn != nil {
+		return m.RawDBFn()
+	}
+	return m.DB
 }
 
 // mockResult implements sql.Result for the mock adaptor.

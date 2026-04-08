@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -23,13 +24,16 @@ var (
 // SQLite is an embedded engine -- the "connection" is a file path,
 // and the database concept is implicit (the file IS the database).
 type SQLiteAdaptor struct {
+	baseDBAdaptor
 	cfg *ConnectionConfig
-	db  *sql.DB
 }
 
 // NewSQLiteAdaptor creates a SQLite adaptor from configuration.
 func NewSQLiteAdaptor(cfg *ConnectionConfig) *SQLiteAdaptor {
-	return &SQLiteAdaptor{cfg: cfg}
+	return &SQLiteAdaptor{
+		baseDBAdaptor: baseDBAdaptor{dialect: "sqlite"},
+		cfg:           cfg,
+	}
 }
 
 func (a *SQLiteAdaptor) Engine() Engine {
@@ -50,8 +54,8 @@ func (a *SQLiteAdaptor) Connect(ctx context.Context) error {
 }
 
 func (a *SQLiteAdaptor) Ping(ctx context.Context) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return err
 	}
 	return a.db.PingContext(ctx)
 }
@@ -97,6 +101,10 @@ func (a *SQLiteAdaptor) CopyRestore(ctx context.Context, opts CopyRestoreOptions
 }
 
 // copyFile copies a file from src to dst.
+// Note: Uses os.Open/os.Create directly because engine adaptors do not
+// receive toolkit.Runtime. This is a documented exception — engine-level
+// file I/O and external tool invocations (mariadb-dump, pg_dump) bypass
+// the Runtime abstraction.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -116,15 +124,12 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-func (a *SQLiteAdaptor) RawDB() *sql.DB {
-	return a.db
-}
-
-// --- TransferAdaptor ---
+// --- TransferAdaptor (ListTables, GetForeignKeys) ---
+// TransferTables is provided by the embedded baseDBAdaptor.
 
 func (a *SQLiteAdaptor) ListTables(ctx context.Context, database string) ([]string, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	rows, err := a.db.QueryContext(ctx,
 		"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
@@ -145,8 +150,8 @@ func (a *SQLiteAdaptor) ListTables(ctx context.Context, database string) ([]stri
 }
 
 func (a *SQLiteAdaptor) GetForeignKeys(ctx context.Context, database string) ([]ForeignKey, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
+	if err := a.requireDB(); err != nil {
+		return nil, err
 	}
 	tables, err := a.ListTables(ctx, database)
 	if err != nil {
@@ -174,37 +179,6 @@ func (a *SQLiteAdaptor) GetForeignKeys(ctx context.Context, database string) ([]
 		rows.Close()
 	}
 	return fks, nil
-}
-
-func (a *SQLiteAdaptor) TransferTables(ctx context.Context, opts TransferOptions) error {
-	if a.db == nil {
-		return fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	if opts.SourceDB == nil {
-		return fmt.Errorf("%w: source database connection required", ErrTransferFailed)
-	}
-	return transferTablesSQL(ctx, opts.SourceDB, a.db, opts, "sqlite")
-}
-
-// --- QueryAdaptor ---
-
-func (a *SQLiteAdaptor) Execute(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	return a.db.ExecContext(ctx, query, args...)
-}
-
-func (a *SQLiteAdaptor) Query(ctx context.Context, query string, args ...any) (*QueryResult, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("%w: not connected", ErrConnectionFailed)
-	}
-	rows, err := a.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrQueryFailed, err)
-	}
-	defer rows.Close()
-	return scanQueryResult(rows)
 }
 
 // filePath returns the configured SQLite file path.
