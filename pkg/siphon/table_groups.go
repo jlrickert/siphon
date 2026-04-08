@@ -97,11 +97,11 @@ func ExpandTableGroup(group *TableGroup, allTables []string) ([]string, error) {
 
 	var result []string
 
-	if group.Pattern != nil && *group.Pattern != "" {
+	if group.Match != nil && *group.Match != "" {
 		// Regex mode: match pattern against all table names.
-		re, err := regexp.Compile(*group.Pattern)
+		re, err := regexp.Compile(*group.Match)
 		if err != nil {
-			return nil, fmt.Errorf("invalid table group pattern %q: %w", *group.Pattern, err)
+			return nil, fmt.Errorf("invalid table group pattern %q: %w", *group.Match, err)
 		}
 
 		excludeSet := make(map[string]bool)

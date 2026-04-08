@@ -31,10 +31,10 @@ func TestExpandTableGroup_SimpleListWithExclude(t *testing.T) {
 	require.Equal(t, []string{"users", "products"}, result)
 }
 
-func TestExpandTableGroup_RegexPattern(t *testing.T) {
+func TestExpandTableGroup_RegexMatch(t *testing.T) {
 	t.Parallel()
 	group := &TableGroup{
-		Pattern: strPtr("^log_"),
+		Match: strPtr("^log_"),
 	}
 	allTables := []string{"users", "orders", "log_access", "log_error", "log_audit"}
 
@@ -46,7 +46,7 @@ func TestExpandTableGroup_RegexPattern(t *testing.T) {
 func TestExpandTableGroup_RegexWithExclude(t *testing.T) {
 	t.Parallel()
 	group := &TableGroup{
-		Pattern: strPtr("^log_"),
+		Match: strPtr("^log_"),
 		Exclude: []string{"log_audit"},
 	}
 	allTables := []string{"users", "log_access", "log_error", "log_audit"}
@@ -59,7 +59,7 @@ func TestExpandTableGroup_RegexWithExclude(t *testing.T) {
 func TestExpandTableGroup_InvalidRegex(t *testing.T) {
 	t.Parallel()
 	group := &TableGroup{
-		Pattern: strPtr("[invalid"),
+		Match: strPtr("[invalid"),
 	}
 	allTables := []string{"users"}
 
@@ -95,7 +95,7 @@ func TestResolveTableSelection_GroupsWithExclude(t *testing.T) {
 	allTables := []string{"users", "orders", "products", "log_access", "log_error"}
 	groups := map[string]*TableGroup{
 		"core": {Tables: []string{"users", "orders", "products"}},
-		"logs": {Pattern: strPtr("^log_")},
+		"logs": {Match: strPtr("^log_")},
 	}
 	opts := TableSelectionOptions{
 		Groups:        []string{"core"},
@@ -128,7 +128,7 @@ func TestResolveTableSelection_ExcludeOnlyStartsFromAll(t *testing.T) {
 	t.Parallel()
 	allTables := []string{"users", "orders", "log_access", "log_error"}
 	groups := map[string]*TableGroup{
-		"logs": {Pattern: strPtr("^log_")},
+		"logs": {Match: strPtr("^log_")},
 	}
 	opts := TableSelectionOptions{
 		ExcludeGroups: []string{"logs"},

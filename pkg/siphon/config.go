@@ -7,19 +7,19 @@ import (
 // Config is the top-level siphon configuration. Scalars use pointer types to
 // distinguish "explicitly set to zero" from "absent" during cascade merging.
 type Config struct {
-	Version            *string                       `yaml:"version,omitempty" json:"version,omitempty"`
-	DefaultConnection  *string                       `yaml:"default_connection,omitempty" json:"default_connection,omitempty"`
-	FallbackConnection *string                       `yaml:"fallback_connection,omitempty" json:"fallback_connection,omitempty"`
-	LogFile            *string                       `yaml:"log_file,omitempty" json:"log_file,omitempty"`
-	LogLevel           *string                       `yaml:"log_level,omitempty" json:"log_level,omitempty"`
+	Version            *string                             `yaml:"version,omitempty" json:"version,omitempty"`
+	DefaultConnection  *string                             `yaml:"default_connection,omitempty" json:"default_connection,omitempty"`
+	FallbackConnection *string                             `yaml:"fallback_connection,omitempty" json:"fallback_connection,omitempty"`
+	LogFile            *string                             `yaml:"log_file,omitempty" json:"log_file,omitempty"`
+	LogLevel           *string                             `yaml:"log_level,omitempty" json:"log_level,omitempty"`
 	Connections        map[string]*engine.ConnectionConfig `yaml:"connections,omitempty" json:"connections,omitempty"`
-	Repos              map[string]*RepoConfig        `yaml:"repos,omitempty" json:"repos,omitempty"`
-	DefaultRepo        *string                       `yaml:"default_repo,omitempty" json:"default_repo,omitempty"`
-	Policies           map[string]*PolicyConfig      `yaml:"policies,omitempty" json:"policies,omitempty"`
-	TableGroups        map[string]*TableGroup        `yaml:"table_groups,omitempty" json:"table_groups,omitempty"`
-	Schedules          map[string]*ScheduleConfig    `yaml:"schedules,omitempty" json:"schedules,omitempty"`
-	ConnectionMap      []ConnectionMapEntry          `yaml:"connection_map,omitempty" json:"connection_map,omitempty"`
-	BackupNameFormat   *string                       `yaml:"backup_name_format,omitempty" json:"backup_name_format,omitempty"`
+	Repos              map[string]*RepoConfig              `yaml:"repos,omitempty" json:"repos,omitempty"`
+	DefaultRepo        *string                             `yaml:"default_repo,omitempty" json:"default_repo,omitempty"`
+	Policies           map[string]*PolicyConfig            `yaml:"policies,omitempty" json:"policies,omitempty"`
+	TableGroups        map[string]*TableGroup              `yaml:"table_groups,omitempty" json:"table_groups,omitempty"`
+	Schedules          map[string]*ScheduleConfig          `yaml:"schedules,omitempty" json:"schedules,omitempty"`
+	ConnectionMap      []ConnectionMapEntry                `yaml:"connection_map,omitempty" json:"connection_map,omitempty"`
+	BackupNameFormat   *string                             `yaml:"backup_name_format,omitempty" json:"backup_name_format,omitempty"`
 }
 
 // RepoConfig defines a backup repository location.
@@ -48,7 +48,7 @@ type PolicyConfig struct {
 // a simple list of table names, or a regex-based pattern match.
 type TableGroup struct {
 	Tables  []string `yaml:"tables,omitempty" json:"tables,omitempty"`
-	Pattern *string  `yaml:"pattern,omitempty" json:"pattern,omitempty"` // regex mode
+	Match   *string  `yaml:"match,omitempty" json:"match,omitempty"` // regex mode
 	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty"`
 }
 
@@ -59,9 +59,9 @@ type ScheduleConfig struct {
 	Repo       *string          `yaml:"repo,omitempty" json:"repo,omitempty"`
 	BackupType *string          `yaml:"backup_type,omitempty" json:"backup_type,omitempty"` // "logical", "physical", "file"
 	Compress   *string          `yaml:"compress,omitempty" json:"compress,omitempty"`
-	Time       *string          `yaml:"time,omitempty" json:"time,omitempty"`               // HH:MM
-	Interval   *string          `yaml:"interval,omitempty" json:"interval,omitempty"`       // daily, hourly, weekly
-	Backend    *string          `yaml:"backend,omitempty" json:"backend,omitempty"`          // "launchd" or "cron"
+	Time       *string          `yaml:"time,omitempty" json:"time,omitempty"`         // HH:MM
+	Interval   *string          `yaml:"interval,omitempty" json:"interval,omitempty"` // daily, hourly, weekly
+	Backend    *string          `yaml:"backend,omitempty" json:"backend,omitempty"`   // "launchd" or "cron"
 	Retention  *RetentionPolicy `yaml:"retention,omitempty" json:"retention,omitempty"`
 	Enabled    *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 }
