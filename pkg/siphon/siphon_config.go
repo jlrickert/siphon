@@ -110,7 +110,8 @@ func (s *Siphon) ConfigEdit(ctx context.Context, opts *ConfigEditOptions) (*Conf
 
 // DefaultConfigTemplate returns an annotated YAML template for a siphon config.
 func DefaultConfigTemplate() string {
-	return `# Siphon configuration
+	return `# yaml-language-server: $schema=https://raw.githubusercontent.com/jlrickert/siphon/main/schemas/siphon-config.json
+# Siphon configuration
 # See: https://github.com/jlrickert/siphon
 #
 # version: "1"
